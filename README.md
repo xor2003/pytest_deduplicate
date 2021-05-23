@@ -3,7 +3,7 @@
 Find duplicate tests based on same code coverage.
 
 In case if you generated unit tests automatically based on input/output information
-using available big amount of input data.
+using available big amount of input data. (for example using https://github.com/laffra/auger)
 Tool groups each test based on hash of it's code coverage.
 
 Just call unit testing using this tool and it will collect code coverage for each test
