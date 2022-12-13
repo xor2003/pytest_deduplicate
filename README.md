@@ -11,3 +11,15 @@ and produce list of duplicate tests.
 False-positives possible if for example there are regular expressions the coverage will be same in this case.
 
 ./_deduplicate_tests.py .
+
+Example:
+
+```
+Duplicates:
+test_collect.py:94:0: W001 tests with duplicate coverage: test_minimal_missing_both_mo (duplicate-test)
+test_collect.py:195:0: W001 tests with duplicate coverage: test_mapping_couldnt_find_mo (duplicate-test)
+
+Superseeded:
+test_collect.py:83:0: W002 test test_minimal_raise_missing_mo covers more when below (bigger_coverage)
+test_collect.py:62:0: W003 test test_minimal_raise_valid covers less when test_minimal_missing_mo (smaller_coverage)
+```
