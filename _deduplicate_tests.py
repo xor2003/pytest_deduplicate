@@ -1,12 +1,14 @@
 #!/usr/bin/env python
-import re, sys, os
+import logging
+import os
+import re
+import sys
 
 import pytest
 from _pytest.unittest import TestCaseFunction
 from coverage import Coverage
 from coverage.data import add_data_to_hash
 from coverage.misc import Hasher
-import logging
 
 hash_tests = dict()
 hash_arcs = dict()
@@ -17,7 +19,7 @@ class FindDuplicateCoverage:
     def __init__(self):
         self.collected = []
         self.name = None
-        self.cov = None
+        self.coverage = None
         self.hash = None
         self.skipped = False
 
@@ -28,24 +30,20 @@ class FindDuplicateCoverage:
 
     def pytest_runtest_logstart(self, nodeid, location):
         logging.debug(f"\nStart test {nodeid}")
-        self.name = re.sub(r'^[^/]+/', '', nodeid)
+        #print(nodeid, location)
+        #file, line, name = location
+        self.name = location
+        #self.name = re.sub(r'^[^/]+/', '', nodeid)
+        #print(self.name, location[2])
 
     def start_collection(self):
         try:
             self.hash = Hasher()
             logging.debug(f"\nCoverage created")
-            self.cov = Coverage(branch=True)
-            self.cov.start()
+            self.coverage = Coverage(branch=True)
+            self.coverage.start()
         except:
-            self.cov = None
-
-    '''
-    def pytest_runtest_setup(self, item):
-        logging.debug('pytest_runtest_setup')
-
-    def pytest_runtest_teardown(self, item, nextitem):
-        logging.debug('pytest_runtest_teardown')
-    '''
+            self.coverage = None
 
     def pytest_report_teststatus(self, report):
         logging.debug('pytest_report_teststatus %s' % str(report))
@@ -61,16 +59,16 @@ class FindDuplicateCoverage:
         logging.debug(f"\nStop test {nodeid}")
 
     def stop_collection(self):
-        if self.cov:
+        if self.coverage:
             try:
-                self.cov.stop()
+                self.coverage.stop()
                 logging.debug(f"\nCoverage stopped")
             except Exception as ex:
                 logging.error("Exception %s", str(ex.args()))
-        if self.cov and not self.skipped:
+        if self.coverage and not self.skipped:
             try:
                 # logging.debug(f"\nStop test {nodeid}")
-                data = self.cov.get_data()
+                data = self.coverage.get_data()
                 arcs_list = []
                 # logging.debug(data.measured_files())
                 myself = os.path.basename(__file__)
@@ -93,14 +91,14 @@ class FindDuplicateCoverage:
 
             except Exception as ex:
                 logging.error("Exception %s", str(ex.args()))
-        if self.cov:
+        if self.coverage:
             try:
-                self.cov.erase()
+                self.coverage.erase()
                 logging.debug(f"\nCoverage erased")
             except Exception as ex:
                 logging.error("Exception %s", str(ex.args()))
         self.name = None
-        self.cov = None
+        self.coverage = None
         self.hash = None
         self.skipped = False
 
@@ -109,18 +107,25 @@ my_plugin = FindDuplicateCoverage()
 # directory = '.'
 pytest.main(sys.argv[1:], plugins=[my_plugin])
 
-logging.debug(len(hash_tests))
+print("Hash size: ", len(hash_tests))
+#print("Hash: ", hash_arcs)
 print("\n\nDuplicates:")
 for k, v in hash_tests.items():
     if len(v) > 1:
         for i in sorted(v):
-            print(i)
+            #  .trunk/trunk.yaml:7:81: [error] line too long (82 > 80 characters) (line-length)
+            file, line, name = i
+            print(f"{file}:{line}:0: [warning] tests with duplicate coverage: {name} (duplicate-test)")
         print('\n')
 
 print("\n\nSuperseeded:")
 for k, v in hash_tests.items():
     for kk, vv in hash_tests.items():
         if k != kk and all(ki <= kii for ki, kii in zip(hash_arcs[k], hash_arcs[kk])):
+            big_file, big_line, big_name = vv[0]
+            print(f"{big_file}:{big_line}:0: [warning] test {big_name} covers more when below (bigger_coverage)")
             for i in sorted(v):
-                print("%s <= %s" % (i, vv[0]))
+                small_file, small_line, small_name = i
+                print(f"{small_file}:{small_line}:0: [warning] test {small_name} covers less when {big_name} (smaller_coverage)")
+                #print("%s <= %s" % (i, vv[0]))
             print('\n')
