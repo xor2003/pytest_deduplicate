@@ -116,7 +116,7 @@ for k, v in hash_tests.items():
             #  .trunk/trunk.yaml:7:81: [error] line too long (82 > 80 characters) (line-length)
             file, line, name = i
             print(
-                f"{file}:{line}:0: W001 tests with duplicate coverage: {name} (duplicate-test)"
+                f"{file}:{line}:4: W001 tests with duplicate coverage: {name} (duplicate-test)"
             )
         print("\n")
 
@@ -126,12 +126,12 @@ for k, v in hash_tests.items():
         if k != kk and all(ki <= kii for ki, kii in zip(hash_arcs[k], hash_arcs[kk])):
             big_file, big_line, big_name = vv[0]
             print(
-                f"{big_file}:{big_line}:0: W002 test {big_name} covers more when below (bigger-coverage)"
+                f"{big_file}:{big_line}:4: W002 test {big_name} covers more when below (bigger-coverage)"
             )
             for i in sorted(v):
                 small_file, small_line, small_name = i
                 print(
-                    f"{small_file}:{small_line}:0: W003 test {small_name} covers less when {big_name} (smaller-coverage)"
+                    f"{small_file}:{small_line}:4: W003 test {small_name} covers less when {big_name} (smaller-coverage)"
                 )
                 # print("%s <= %s" % (i, vv[0]))
             print("\n")
