@@ -9,8 +9,8 @@ from coverage import Coverage
 from coverage.data import add_data_to_hash
 from coverage.misc import Hasher
 
-hash_tests = dict()
-hash_arcs = dict()
+hash_tests = {}
+hash_arcs = {}
 
 
 class FindDuplicateCoverage:
