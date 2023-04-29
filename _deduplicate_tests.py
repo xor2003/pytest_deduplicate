@@ -14,7 +14,7 @@ hash_arcs = {}
 
 
 class FindDuplicateCoverage:
-    def __init__(self):
+    def __init__(self) -> None:
         self.collected = []
         self.name = None
         self.coverage = None
@@ -29,7 +29,6 @@ class FindDuplicateCoverage:
     def pytest_runtest_logstart(self, nodeid, location):
         logging.debug(f"\nStart test {nodeid}")
         # print(nodeid, location)
-        # file, line, name = location
         self.name = location
         # self.name = re.sub(r'^[^/]+/', '', nodeid)
         # print(self.name, location[2])
@@ -72,7 +71,7 @@ class FindDuplicateCoverage:
                 myself = os.path.basename(__file__)
                 for f in data.measured_files():
                     if os.path.basename(f) != myself and not os.path.basename(
-                        f
+                        f,
                     ).startswith("test_"):
                         logging.debug(f)
                         logging.debug(data.lines(f))
@@ -104,19 +103,17 @@ class FindDuplicateCoverage:
 
 
 my_plugin = FindDuplicateCoverage()
-# directory = '.'
 pytest.main(sys.argv[1:], plugins=[my_plugin])
 
 print("Hash size: ", len(hash_tests))
-# print("Hash: ", hash_arcs)
 print("\n\nDuplicates:")
-for k, v in hash_tests.items():
+for _k, v in hash_tests.items():
     if len(v) > 1:
         for i in sorted(v):
             #  .trunk/trunk.yaml:7:81: [error] line too long (82 > 80 characters) (line-length)
             file, line, name = i
             print(
-                f"{file}:{line}:4: W001 tests with duplicate coverage: {name} (duplicate-test)"
+                f"{file}:{line}:4: W001 tests with duplicate coverage: {name} (duplicate-test)",
             )
         print("\n")
 
@@ -126,12 +123,11 @@ for k, v in hash_tests.items():
         if k != kk and all(ki <= kii for ki, kii in zip(hash_arcs[k], hash_arcs[kk])):
             big_file, big_line, big_name = vv[0]
             print(
-                f"{big_file}:{big_line}:4: W002 test {big_name} covers more when below (bigger-coverage)"
+                f"{big_file}:{big_line}:4: W002 test {big_name} covers more when below (bigger-coverage)",
             )
             for i in sorted(v):
                 small_file, small_line, small_name = i
                 print(
-                    f"{small_file}:{small_line}:4: W003 test {small_name} covers less when {big_name} (smaller-coverage)"
+                    f"{small_file}:{small_line}:4: W003 test {small_name} covers less when {big_name} (smaller-coverage)",
                 )
-                # print("%s <= %s" % (i, vv[0]))
             print("\n")
