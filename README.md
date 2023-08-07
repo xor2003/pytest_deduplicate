@@ -1,12 +1,16 @@
 # pytest_deduplicate
 
-The pytest_deduplicate is designed to identify duplicate unit tests that have the same code coverage. It can be particularly useful when unit tests are automatically generated based on input/output information for a function, using a large amount of available input data (for example, with the help of the auger library).
+The pytest_deduplicate is designed to identify duplicate or superseeding unit tests that have the same or bigger code coverage. 
+It can be particularly useful when unit tests are automatically generated based on input/output information for a function, 
+using a large amount of available input data (for example, with the help of the auger library).
 
-This tool groups each test together based on the hash of its code coverage. By invoking unit testing with this tool, it will collect code coverage for each test and generate a list of duplicate tests. However, it is important to note that false-positives may occur if, for example, there are regular expressions involved, as the code coverage in such cases may appear the same.
+This tool groups each test together based on the coverage set. 
+By invoking unit testing with this tool, it will collect code coverage for each test and generate a list of duplicate tests. 
+However, it is important to note that false-positives may occur if, for example, there are regular expressions involved, as the code coverage in such cases may appear the same.
 
-To use the pytest_deduplicate , simply call:
+To use simply call:
 
-    ./_deduplicate_tests.py .
+    ./deduplicate_tests.py
 
 Example:
 

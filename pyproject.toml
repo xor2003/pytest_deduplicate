@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.2.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytest_deduplicate"
+version = "0.1.1"
+description = "Identifies duplicate unit tests"
+authors = [
+    {name = "xor2003", email = "xor2003@gmx.com"},
+]
+dependencies = ["pytest","coverage"]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "GPL"}
+keywords = ["pytest", "deduplicate"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/xor2003/pytest_deduplicate"
+[tool.distutils.egg_info]
+tag-build = ""
+tag-date = 0
+
+[tool.setuptools]
+include-package-data = false
+
+[project.scripts]
+pytest_deduplicate = "pytest_deduplicate:main"
