@@ -10,9 +10,9 @@ However, it is important to note that false-positives may occur if, for example,
 
 To use simply call:
 
-    ./deduplicate_tests.py
+    pytest_deduplicate <your_project_directory>
 
-Example:
+Result example:
 
 ```
 Duplicates:
