@@ -30,8 +30,6 @@ class FindDuplicateCoverage:
         logging.debug(f"\nStart test {nodeid}")
         # print(nodeid, location)
         self.name = location
-        # self.name = re.sub(r'^[^/]+/', '', nodeid)
-        # print(self.name, location[2])
 
     def start_collection(self):
         try:
@@ -102,32 +100,36 @@ class FindDuplicateCoverage:
         self.skipped = False
 
 
-my_plugin = FindDuplicateCoverage()
-pytest.main(sys.argv[1:], plugins=[my_plugin])
+def main():
+    my_plugin = FindDuplicateCoverage()
+    pytest.main(sys.argv[1:], plugins=[my_plugin])
 
-print("Hash size: ", len(hash_tests))
-print("\n\nDuplicates:")
-for _k, v in hash_tests.items():
-    if len(v) > 1:
-        for i in sorted(v):
-            #  .trunk/trunk.yaml:7:81: [error] line too long (82 > 80 characters) (line-length)
-            file, line, name = i
-            print(
-                f"{file}:{line}:4: W001 tests with duplicate coverage: {name} (duplicate-test)",
-            )
-        print("\n")
-
-print("\n\nSuperseeded:")
-for k, v in hash_tests.items():
-    for kk, vv in hash_tests.items():
-        if k != kk and all(ki <= kii for ki, kii in zip(hash_arcs[k], hash_arcs[kk])):
-            big_file, big_line, big_name = vv[0]
-            print(
-                f"{big_file}:{big_line}:4: W002 test {big_name} covers more when below (bigger-coverage)",
-            )
+    print("Hash size: ", len(hash_tests))
+    print("\n\nDuplicates:")
+    for _k, v in hash_tests.items():
+        if len(v) > 1:
             for i in sorted(v):
-                small_file, small_line, small_name = i
+                #  .trunk/trunk.yaml:7:81: [error] line too long (82 > 80 characters) (line-length)
+                file, line, name = i
                 print(
-                    f"{small_file}:{small_line}:4: W003 test {small_name} covers less when {big_name} (smaller-coverage)",
+                    f"{file}:{line}:4: W001 tests with duplicate coverage: {name} (duplicate-test)",
                 )
             print("\n")
+
+    print("\n\nSuperseeded:")
+    for k, v in hash_tests.items():
+        for kk, vv in hash_tests.items():
+            if k != kk and all(ki <= kii for ki, kii in zip(hash_arcs[k], hash_arcs[kk])):
+                bigger_test_filename, big_line, bigger_test_name = vv[0]
+                print(
+                    f"{bigger_test_filename}:{big_line}:4: W002 test {bigger_test_name} covers more when below (bigger-coverage)",
+                )
+                for i in sorted(v):
+                    smaller_filename, small_line, smaller_test_name = i
+                    print(
+                        f"{smaller_filename}:{small_line}:4: W003 test {smaller_test_name} covers less when {bigger_test_name} (smaller-coverage)",
+                    )
+                print("\n")
+
+if __name__ == "__main__":
+    main()
