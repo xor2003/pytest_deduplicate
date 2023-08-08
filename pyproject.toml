@@ -13,7 +13,7 @@ dependencies = ["pytest","coverage"]
 requires-python = ">=3.8"
 readme = "README.md"
 license = {text = "GPL"}
-keywords = ["pytest", "deduplicate"]
+keywords = ["duplicate test detection","test optimization", "test efficiency"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
