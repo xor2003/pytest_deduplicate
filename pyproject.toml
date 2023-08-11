@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytest_deduplicate"
-version = "0.1.5"
+version = "0.1.6"
 description = "Identifies duplicate unit tests"
 authors = [
     {name = "xor2003", email = "xor2003@gmx.com"},
