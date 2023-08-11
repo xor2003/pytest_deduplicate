@@ -23,7 +23,7 @@ class FindDuplicateCoverage:
         self.name = None  # the name of the current test
         self.coverage = None  # Coverage object to measure code coverage
         self.skipped = False  # flag to track if the test is skipped
-        self._coverage = Coverage(branch=True)  # initialize the Coverage object with branch coverage
+        self.coverage = Coverage(branch=True)  # initialize the Coverage object with branch coverage
         #self.coverage = copy(self._coverage)
 
     #@profile
@@ -40,7 +40,8 @@ class FindDuplicateCoverage:
     def start_collection(self) -> None:
         try:
             #logging.debug("Coverage created")
-            self.coverage = copy(self._coverage) # initialize the Coverage object with branch coverage
+            #self.coverage = copy(self._coverage) # initialize the Coverage object with branch coverage
+            self.coverage.erase()  # start the coverage measurement
             self.coverage.start()  # start the coverage measurement
         except:
             self.coverage = None
@@ -94,15 +95,7 @@ class FindDuplicateCoverage:
 
             except Exception as ex:
                 logging.exception("Exception %s", ex.args())
-        if self.coverage:
-            try:
-                self.coverage.erase()
-                logging.debug("Coverage erased")
-            except Exception as ex:
-                logging.exception("Exception %s", ex.args())
         self.name = None
-        self.coverage = None
-        self.hasher = None
         self.skipped = False
 
 
