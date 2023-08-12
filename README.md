@@ -10,7 +10,8 @@ However, it is important to note that false-positives may occur if, for example,
 
 To use simply call:
 
-    pytest_deduplicate <your_project_directory>
+    cd <working_directory>
+    pytest_deduplicate <pytest_parameters>
 
 Result example:
 
