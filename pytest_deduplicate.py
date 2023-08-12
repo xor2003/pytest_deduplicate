@@ -108,8 +108,9 @@ def main():
         items = []
         for coverage_hash1, tests_names1 in hash_tests.items():
             if coverage_hash1 != coverage_hash2 and \
-                    all(arcs2_arcs >= hash_arcs[coverage_hash1].get(arcs2_filename, set()) for
-                        arcs2_filename, arcs2_arcs in hash_arcs[coverage_hash2].items()):
+                set(hash_arcs[coverage_hash2].keys()) >= set(hash_arcs[coverage_hash2].keys()) and \
+                    all(arcs2_arcs >= hash_arcs[coverage_hash1].get(arcs2_filename, set()) \
+                        for arcs2_filename, arcs2_arcs in hash_arcs[coverage_hash2].items()):
                 items.extend(tests_names1)
         if items:
             bigger_filename, bigger_linenum, bigger_test_name = tests_names2[0]
