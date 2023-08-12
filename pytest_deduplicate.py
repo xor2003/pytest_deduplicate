@@ -76,10 +76,9 @@ class FindDuplicateCoverage:
                         continue
                     logging.debug(file_name)
                     add_data_to_hash(data, file_name, hasher)
-                    print(file_name, data.arcs(file_name), data.lines(file_name))
                     arcs_list += [set(data.arcs(file_name))]
                 if not arcs_list:
-                    print("Empty arcs for %s %s", self.name, arcs_list)
+                    logging.warning("Empty arcs for %s %s", self.name, arcs_list)
                     return
                 text_hash = hasher.hexdigest()
 
@@ -102,7 +101,7 @@ def main():
     my_plugin = FindDuplicateCoverage()
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
-    print("Hash size: ", len(hash_tests))
+    #print("Hash size: ", len(hash_tests))
     print("\n\nDuplicates:")
     for tests_names1 in hash_tests.values():
         if len(tests_names1) == 1:
@@ -110,7 +109,7 @@ def main():
         for i in sorted(tests_names1):
             file, line, name = i
             print(
-                f"{file}:{line}:1: W001 tests with duplicate coverage: {name} (duplicate-test)",
+                f"{file}:{line}:1: W001 tests with same coverage: {name} (duplicate-test)",
             )
         print("\n")
 
@@ -121,12 +120,12 @@ def main():
                     all(arcs1 <= arcs2 for arcs1, arcs2 in zip(hash_arcs[coverage_hash1], hash_arcs[coverage_hash2])):
                 bigger_filename, bigger_linenum, bigger_test_name = tests_names2[0]
                 print(
-                    f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} covers more when below (bigger-coverage)",
+                    f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
                 )
                 for i in sorted(tests_names1):
                     smaller_filename, smaller_linenum, smaller_name = i
                     print(
-                        f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less when {bigger_test_name} (smaller-coverage)",
+                        f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test (smaller-coverage)",
                     )
                 print("\n")
 
