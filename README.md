@@ -11,7 +11,7 @@ However, it is important to note that false-positives may occur if, for example,
 To use simply call:
 
     cd <working_directory>
-    pytest_deduplicate <pytest_parameters>
+    pytest_deduplicate [pytest_parameters]
 
 Result example:
 

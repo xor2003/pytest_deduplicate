@@ -1,9 +1,7 @@
 #!/usr/bin/env python
-import _hashlib
 import logging
 import os
 import sys
-from copy import copy
 
 #from line_profiler_pycharm import profile
 
@@ -23,7 +21,7 @@ class FindDuplicateCoverage:
         self.name = None  # the name of the current test
         self.coverage = None  # Coverage object to measure code coverage
         self.skipped = False  # flag to track if the test is skipped
-        self.coverage = Coverage(branch=True)  # initialize the Coverage object with branch coverage
+        self.coverage = Coverage(branch=True, data_file=None, omit=os.path.basename(__file__))  # initialize the Coverage object with branch coverage
         #self.coverage = copy(self._coverage)
 
     #@profile
@@ -40,7 +38,6 @@ class FindDuplicateCoverage:
     def start_collection(self) -> None:
         try:
             #logging.debug("Coverage created")
-            #self.coverage = copy(self._coverage) # initialize the Coverage object with branch coverage
             self.coverage.erase()  # start the coverage measurement
             self.coverage.start()  # start the coverage measurement
         except:
@@ -74,15 +71,16 @@ class FindDuplicateCoverage:
                 data = self.coverage.get_data()
                 hasher = Hasher()  # Hasher object to hash the coverage data
                 arcs_list = []
-                myself = os.path.basename(__file__)
                 for file_name in data.measured_files():
-                    if os.path.basename(file_name) != myself and not os.path.basename(
-                        file_name,
-                    ).startswith("test_"):
-                        logging.debug(file_name)
-                        logging.debug(data.lines(file_name))
-                        add_data_to_hash(data, file_name, hasher)
-                        arcs_list += [set(data.arcs(file_name))]
+                    if os.path.basename(file_name).startswith("test_"):
+                        continue
+                    logging.debug(file_name)
+                    add_data_to_hash(data, file_name, hasher)
+                    print(file_name, data.arcs(file_name), data.lines(file_name))
+                    arcs_list += [set(data.arcs(file_name))]
+                if not arcs_list:
+                    print("Empty arcs for %s %s", self.name, arcs_list)
+                    return
                 text_hash = hasher.hexdigest()
 
                 logging.debug(text_hash)
