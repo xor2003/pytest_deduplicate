@@ -16,13 +16,41 @@ from coverage.misc import Hasher
 Arc = tuple[int, int]
 
 @dataclass
-class Tests:
+class TestCoverage:
 
     test_names: list[str]
     file_arcs: dict[str, set[Arc]]
 
+    def __len__(self):
+        return sum(map(len, self.file_arcs.values()))
 
-hash_tests: dict[str, Tests] = {}
+    @staticmethod
+    def union(*obj_list):
+        result_dict = {}
+        for obj in obj_list:
+            for filename, file_set in obj.file_arcs.items():
+                if filename in result_dict:
+                    result_dict[filename].update(file_set)
+                else:
+                    result_dict[filename] = file_set.copy()
+        return TestCoverage(["Union"], result_dict)
+
+    def issubset(self, other):
+        return all(file_set.issubset(other.file_arcs.get(filename, set()))
+                   for filename, file_set in self.file_arcs.items())
+
+    def __and__(self, other):
+        result_dict = {filename: file_set & other.file_arcs[filename]
+                       for filename, file_set in self.file_arcs.items()
+                       if filename in other.file_arcs}
+        return TestCoverage(["Intersection"], result_dict)
+
+    def __sub__(self, other):
+        result_dict = {filename: file_set - other.file_arcs.get(filename, set())
+                       for filename, file_set in self.file_arcs.items()}
+        return TestCoverage(["Difference"], result_dict)
+
+hash_tests: dict[str, TestCoverage] = {}
 
 
 class FindDuplicateCoverage:
@@ -97,7 +125,7 @@ class FindDuplicateCoverage:
                 if text_hash in hash_tests:
                     hash_tests[text_hash].test_names.append(self.name)
                 else:
-                    hash_tests[text_hash] = Tests(test_names=[self.name], file_arcs=arcs_list)
+                    hash_tests[text_hash] = TestCoverage(test_names=[self.name], file_arcs=arcs_list)
                 logging.debug("Coverage collected")
 
             except Exception as ex:
@@ -106,13 +134,15 @@ class FindDuplicateCoverage:
         self.skipped = False
 
 
-def find_fully_overlapped_sets(list_of_sets: list[set]) -> list[tuple[set, list[set]]]:
+
+    
+def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[TestCoverage, list[TestCoverage]]]:
     """Returns a list of sets that are fully overlapped by multiple sets."""
     sorted_sets = sorted(list_of_sets, key=len, reverse=True)
 
     fully_overlapped_sets = []
     while (big_set := sorted_sets.pop(0)) and sorted_sets:
-        if not big_set.issubset(set.union(*sorted_sets)):
+        if not big_set.issubset(TestCoverage.union(*sorted_sets)):
             continue
         big_set_ = copy(big_set)
         small_sets = []
@@ -134,7 +164,19 @@ def main():
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
     # print("Hash size: ", len(hash_tests))
+    print("\n\nDuplicates:")
+    for tests in hash_tests.values():
+        if len(tests.test_names) == 1:
+            continue
+        for item in sorted(tests.test_names):
+            file, line, name = item
+            print(
+                f"{file}:{line}:1: W001 tests with same coverage: {name} (duplicate-test)",
+            )
+        print("\n")
+
     print("\n\nGod tests:")
+    print(find_fully_overlapped_sets([TestCoverage(cov.test_names, cov.file_arcs) for cov in hash_tests.values()]))
 
     print("\n\nSuperseeded:")
     for coverage_hash2, tests2 in hash_tests.items():
@@ -157,16 +199,6 @@ def main():
                 )
             print("\n")
 
-    print("\n\nDuplicates:")
-    for tests in hash_tests.values():
-        if len(tests.test_names) == 1:
-            continue
-        for item in sorted(tests.test_names):
-            file, line, name = item
-            print(
-                f"{file}:{line}:1: W001 tests with same coverage: {name} (duplicate-test)",
-            )
-        print("\n")
 
 if __name__ == "__main__":
     main()
