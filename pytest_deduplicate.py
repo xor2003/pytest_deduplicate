@@ -2,6 +2,8 @@
 import logging
 import os
 import sys
+from copy import copy
+from dataclasses import dataclass
 
 import pytest
 from _pytest.unittest import TestCaseFunction
@@ -11,8 +13,16 @@ from coverage.misc import Hasher
 
 # from line_profiler_pycharm import profile
 
-hash_tests = {}
-hash_arcs = {}
+Arc = tuple[int, int]
+
+@dataclass
+class Tests:
+
+    test_names: list[str]
+    file_arcs: dict[str, set[Arc]]
+
+
+hash_tests: dict[str, Tests] = {}
 
 
 class FindDuplicateCoverage:
@@ -85,10 +95,9 @@ class FindDuplicateCoverage:
 
                 logging.debug(text_hash)
                 if text_hash in hash_tests:
-                    hash_tests[text_hash] += [self.name]
+                    hash_tests[text_hash].test_names.append(self.name)
                 else:
-                    hash_tests[text_hash] = [self.name]
-                    hash_arcs[text_hash] = arcs_list
+                    hash_tests[text_hash] = Tests(test_names=[self.name], file_arcs=arcs_list)
                 logging.debug("Coverage collected")
 
             except Exception as ex:
@@ -97,23 +106,47 @@ class FindDuplicateCoverage:
         self.skipped = False
 
 
+def find_fully_overlapped_sets(list_of_sets: list[set]) -> list[tuple[set, list[set]]]:
+    """Returns a list of sets that are fully overlapped by multiple sets."""
+    sorted_sets = sorted(list_of_sets, key=len, reverse=True)
+
+    fully_overlapped_sets = []
+    while (big_set := sorted_sets.pop(0)) and sorted_sets:
+        if not big_set.issubset(set.union(*sorted_sets)):
+            continue
+        big_set_ = copy(big_set)
+        small_sets = []
+        for i in range(len(sorted_sets) - 1, -1, -1):
+            if not big_set_:
+                break
+            if big_set_ & sorted_sets[i]:
+                big_set_ -= sorted_sets[i]
+                small_sets.append(sorted_sets[i])
+
+        fully_overlapped_sets.append((big_set, small_sets))
+    return fully_overlapped_sets
+
+
+
 # @profile
 def main():
     my_plugin = FindDuplicateCoverage()
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
     # print("Hash size: ", len(hash_tests))
+    print("\n\nGod tests:")
+
     print("\n\nSuperseeded:")
-    for coverage_hash2, tests_names2 in hash_tests.items():
+    for coverage_hash2, tests2 in hash_tests.items():
         items = []
-        for coverage_hash1, tests_names1 in hash_tests.items():
+        for coverage_hash1, tests1 in hash_tests.items():
             if coverage_hash1 != coverage_hash2 and \
-                set(hash_arcs[coverage_hash2].keys()) >= set(hash_arcs[coverage_hash2].keys()) and \
-                    all(arcs2_arcs >= hash_arcs[coverage_hash1].get(arcs2_filename, set()) \
-                        for arcs2_filename, arcs2_arcs in hash_arcs[coverage_hash2].items()):
-                items.extend(tests_names1)
+                set(tests2.file_arcs.keys()) >= set(tests1.file_arcs.keys()) and \
+                    all(arcs2_arcs >= tests1.file_arcs.get(arcs2_filename, set()) \
+                        for arcs2_filename, arcs2_arcs in tests2.file_arcs.items()):
+                items.extend(tests1.test_names)
         if items:
-            bigger_filename, bigger_linenum, bigger_test_name = tests_names2[0]
+            bigger_filename, bigger_linenum, bigger_test_name = tests2.test_names[0]
             print(
                 f"{bigger_filename}:{bigger_linenum}:1: I002 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
             )
@@ -125,10 +158,10 @@ def main():
             print("\n")
 
     print("\n\nDuplicates:")
-    for tests_names1 in hash_tests.values():
-        if len(tests_names1) == 1:
+    for tests in hash_tests.values():
+        if len(tests.test_names) == 1:
             continue
-        for item in sorted(tests_names1):
+        for item in sorted(tests.test_names):
             file, line, name = item
             print(
                 f"{file}:{line}:1: W001 tests with same coverage: {name} (duplicate-test)",

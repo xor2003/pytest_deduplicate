@@ -1,7 +1,7 @@
 
 import unittest
 
-from function import function
+from tests.function import function
 
 def function2(x):
     if x % 2 == 0:

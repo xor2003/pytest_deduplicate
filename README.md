@@ -16,11 +16,38 @@ To use simply call:
 Result example:
 
 ```
-Duplicates:
-test_collect.py:94:0: W001 tests with duplicate coverage: test_minimal_missing_both_mo (duplicate-test)
-test_collect.py:195:0: W001 tests with duplicate coverage: test_mapping_couldnt_find_mo (duplicate-test)
+def function(x):
+    if x % 2 == 0:
+        for i in range(1, 3):
+            print("even")
+        return True
+    else:
+        print("odd")
+        return False
+
+
+    def test_even0(self):
+        self.assertEqual(function(0), True)
+
+    def test_even2(self):
+        self.assertEqual(function(2), True)
+
+    def test_odd(self):
+        self.assertEqual(function(3), False)
+
+    def test_evenodd(self):
+        self.assertEqual(function(2), True)
+        self.assertEqual(function(3), False)
+
 
 Superseeded:
-test_collect.py:83:0: W002 test test_minimal_raise_missing_mo covers more when below (bigger_coverage)
-test_collect.py:62:0: W003 test test_minimal_raise_valid covers less when test_minimal_missing_mo (smaller_coverage)
+tests/test_simple.py:25:1: I002 test TestSimple.test_evenodd covers more code when test(s) below (bigger-coverage)
+tests/test_simple.py:16:1: W003 test TestSimple.test_even0 covers less code when TestSimple.test_evenodd test (smaller-coverage)
+tests/test_simple.py:19:1: W003 test TestSimple.test_even2 covers less code when TestSimple.test_evenodd test (smaller-coverage)
+tests/test_simple.py:22:1: W003 test TestSimple.test_odd covers less code when TestSimple.test_evenodd test (smaller-coverage)
+
+
+Duplicates:
+tests/test_simple.py:16:1: W001 tests with same coverage: TestSimple.test_even0 (duplicate-test)
+tests/test_simple.py:19:1: W001 tests with same coverage: TestSimple.test_even2 (duplicate-test)
 ```
