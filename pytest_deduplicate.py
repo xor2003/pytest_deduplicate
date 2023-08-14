@@ -4,6 +4,7 @@ import os
 import sys
 from copy import copy
 from dataclasses import dataclass
+from typing import Tuple, Optional
 
 import pytest
 from _pytest.unittest import TestCaseFunction
@@ -14,11 +15,12 @@ from coverage.misc import Hasher
 # from line_profiler_pycharm import profile
 
 Arc = tuple[int, int]
+Location = Tuple[str, Optional[int], str]
 
 @dataclass
 class TestCoverage:
 
-    test_names: list[str]
+    tests_locations: list[Location]
     file_arcs: dict[str, set[Arc]]
 
     def __len__(self):
@@ -33,7 +35,7 @@ class TestCoverage:
                     result_dict[filename].update(file_set)
                 else:
                     result_dict[filename] = file_set.copy()
-        return TestCoverage(["Union"], result_dict)
+        return TestCoverage([], result_dict)
 
     def issubset(self, other):
         return all(file_set.issubset(other.file_arcs.get(filename, set()))
@@ -43,12 +45,12 @@ class TestCoverage:
         result_dict = {filename: file_set & other.file_arcs[filename]
                        for filename, file_set in self.file_arcs.items()
                        if filename in other.file_arcs}
-        return TestCoverage(["Intersection"], result_dict)
+        return TestCoverage([], result_dict)
 
     def __sub__(self, other):
         result_dict = {filename: file_set - other.file_arcs.get(filename, set())
                        for filename, file_set in self.file_arcs.items()}
-        return TestCoverage(["Difference"], result_dict)
+        return TestCoverage([], result_dict)
 
 hash_tests: dict[str, TestCoverage] = {}
 
@@ -56,7 +58,7 @@ hash_tests: dict[str, TestCoverage] = {}
 class FindDuplicateCoverage:
     def __init__(self) -> None:
         self.collected = []  # list to store collected test names
-        self.name = None  # the name of the current test
+        self.location = None  # the name of the current test
         self.coverage = None  # Coverage object to measure code coverage
         self.skipped = False  # flag to track if the test is skipped
         self.coverage = Coverage(branch=True, data_file=None,
@@ -69,9 +71,9 @@ class FindDuplicateCoverage:
         self.collected = [item.name for item in items if isinstance(item, TestCaseFunction)]
 
     # @profile
-    def pytest_runtest_logstart(self, nodeid: str, location: str) -> None:
+    def pytest_runtest_logstart(self, nodeid: str, location: Location) -> None:
         # logging.debug("Start test %s", nodeid)
-        self.name = location  # set the name of the current test
+        self.location = location  # set the name of the current test
 
     # @profile
     def start_collection(self) -> None:
@@ -117,20 +119,20 @@ class FindDuplicateCoverage:
                     add_data_to_hash(data, file_name, hasher)
                     arcs_list[file_name] = set(data.arcs(file_name))
                 if not arcs_list:
-                    logging.warning("Empty arcs for %s %s", self.name, arcs_list)
+                    logging.warning("Empty arcs for %s %s", self.location, arcs_list)
                     return
                 text_hash = hasher.hexdigest()
 
                 logging.debug(text_hash)
                 if text_hash in hash_tests:
-                    hash_tests[text_hash].test_names.append(self.name)
+                    hash_tests[text_hash].tests_locations.append(self.location)
                 else:
-                    hash_tests[text_hash] = TestCoverage(test_names=[self.name], file_arcs=arcs_list)
+                    hash_tests[text_hash] = TestCoverage(tests_locations=[self.location], file_arcs=arcs_list)
                 logging.debug("Coverage collected")
 
             except Exception as ex:
                 logging.exception("Exception %s", ex.args())
-        self.name = None
+        self.location = None
         self.skipped = False
 
 
@@ -164,21 +166,29 @@ def main():
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
     # print("Hash size: ", len(hash_tests))
-    print("\n\nDuplicates:")
+    print("Duplicates:")
     for tests in hash_tests.values():
-        if len(tests.test_names) == 1:
+        if len(tests.tests_locations) == 1:
             continue
-        for item in sorted(tests.test_names):
+        for item in sorted(tests.tests_locations):
             file, line, name = item
             print(
-                f"{file}:{line}:1: W001 tests with same coverage: {name} (duplicate-test)",
+                f"{file}:{line}:1: W001 tests with same coverage: {name} consider leave only one (duplicate-test)",
             )
-        print("\n")
 
-    print("\n\nGod tests:")
-    print(find_fully_overlapped_sets([TestCoverage(cov.test_names, cov.file_arcs) for cov in hash_tests.values()]))
+    print("\nGod tests:")
+    for big_test, small_tests in find_fully_overlapped_sets([TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
+        bigger_filename, bigger_linenum, bigger_test_name = big_test.tests_locations[0]
+        print(
+            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage)",
+        )
+        for item in small_tests:
+            smaller_filename, smaller_linenum, smaller_name = item.tests_locations[0]
+            print(
+                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
+            )
 
-    print("\n\nSuperseeded:")
+    print("\nSuperseeded:")
     for coverage_hash2, tests2 in hash_tests.items():
         items = []
         for coverage_hash1, tests1 in hash_tests.items():
@@ -186,16 +196,16 @@ def main():
                 set(tests2.file_arcs.keys()) >= set(tests1.file_arcs.keys()) and \
                     all(arcs2_arcs >= tests1.file_arcs.get(arcs2_filename, set()) \
                         for arcs2_filename, arcs2_arcs in tests2.file_arcs.items()):
-                items.extend(tests1.test_names)
+                items.extend(tests1.tests_locations)
         if items:
-            bigger_filename, bigger_linenum, bigger_test_name = tests2.test_names[0]
+            bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
             print(
                 f"{bigger_filename}:{bigger_linenum}:1: I002 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
             )
             for item in sorted(items):
                 smaller_filename, smaller_linenum, smaller_name = item
                 print(
-                    f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test (smaller-coverage)",
+                    f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test. Consider delete (smaller-coverage)",
                 )
             print("\n")
 

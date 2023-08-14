@@ -40,14 +40,18 @@ def function(x):
         self.assertEqual(function(3), False)
 
 
+Duplicates:
+tests/test_simple.py:16:1: W001 tests with same coverage: TestSimple.test_even0 consider leave only one (duplicate-test)
+tests/test_simple.py:19:1: W001 tests with same coverage: TestSimple.test_even2 consider leave only one (duplicate-test)
+
+God tests:
+tests/test_simple.py:25:1: W002 test TestSimple.test_evenodd can be replaced by smaller tests below (bigger-coverage)
+tests/test_simple.py:22:1: I002 test TestSimple.test_odd covers part of TestSimple.test_evenodd test (smaller-test)
+tests/test_simple.py:16:1: I002 test TestSimple.test_even0 covers part of TestSimple.test_evenodd test (smaller-test)
+
 Superseeded:
 tests/test_simple.py:25:1: I002 test TestSimple.test_evenodd covers more code when test(s) below (bigger-coverage)
-tests/test_simple.py:16:1: W003 test TestSimple.test_even0 covers less code when TestSimple.test_evenodd test (smaller-coverage)
-tests/test_simple.py:19:1: W003 test TestSimple.test_even2 covers less code when TestSimple.test_evenodd test (smaller-coverage)
-tests/test_simple.py:22:1: W003 test TestSimple.test_odd covers less code when TestSimple.test_evenodd test (smaller-coverage)
-
-
-Duplicates:
-tests/test_simple.py:16:1: W001 tests with same coverage: TestSimple.test_even0 (duplicate-test)
-tests/test_simple.py:19:1: W001 tests with same coverage: TestSimple.test_even2 (duplicate-test)
+tests/test_simple.py:16:1: W003 test TestSimple.test_even0 covers less code when TestSimple.test_evenodd test. Consider delete (smaller-coverage)
+tests/test_simple.py:19:1: W003 test TestSimple.test_even2 covers less code when TestSimple.test_evenodd test. Consider delete (smaller-coverage)
+tests/test_simple.py:22:1: W003 test TestSimple.test_odd covers less code when TestSimple.test_evenodd test. Consider delete (smaller-coverage)
 ```
