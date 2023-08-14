@@ -175,6 +175,7 @@ def main():
             print(
                 f"{file}:{line}:1: W001 tests with same coverage: {name} consider leave only one (duplicate-test)",
             )
+        print("\n")
 
     print("\nGod tests:")
     for big_test, small_tests in find_fully_overlapped_sets([TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
@@ -187,6 +188,7 @@ def main():
             print(
                 f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
             )
+        print("\n")
 
     print("\nSuperseeded:")
     for coverage_hash2, tests2 in hash_tests.items():
