@@ -17,6 +17,7 @@ from coverage.misc import Hasher
 Arc = tuple[int, int]
 Location = tuple[str, Optional[int], str]
 
+
 @dataclass
 class TestCoverage:
     """
@@ -94,6 +95,18 @@ class TestCoverage:
         True
         >>> tc2.issubset(tc1)
         False
+        >>> tc2.issubset(tc2)
+        True
+        >>> tc3 = TestCoverage([], {"file1.py": {Arc((1, 2)), Arc((2, 3))}, "file2.py": {Arc((3, 4))}, "file5.py": {Arc((6, 7))}})
+        >>> tc3.issubset(tc2)
+        False
+        >>> tc4 = TestCoverage([], {})
+        >>> tc4.issubset(tc2)
+        True
+        >>> tc2.issubset(tc4)
+        False
+        >>> tc4.issubset(tc4)
+        True
         """
         return all(file_set.issubset(other.file_arcs.get(filename, set()))
                    for filename, file_set in self.file_arcs.items())
@@ -112,10 +125,10 @@ class TestCoverage:
         >>> bool(TestCoverage([], {}))
         False
         """
-        result_dict = {filename: file_set & other.file_arcs[filename]
+        result_dict = {filename: and_
                        for filename, file_set in self.file_arcs.items()
-                       if filename in other.file_arcs and file_set & other.file_arcs[filename]}
-        return TestCoverage([], result_dict)
+                       if filename in other.file_arcs and (and_ := file_set & other.file_arcs[filename])}
+        return TestCoverage(other.tests_locations, result_dict)
 
     def __sub__(self, other):
         """
@@ -127,8 +140,9 @@ class TestCoverage:
         >>> tc_sub.file_arcs == {"file1.py": {Arc((1, 2))}, "file2.py": {Arc((3, 4))}}
         True
         """
-        result_dict = {filename: file_set - other.file_arcs.get(filename, set())
-                       for filename, file_set in self.file_arcs.items()}
+        result_dict = {filename: sub
+                       for filename, file_set in self.file_arcs.items()
+                       if (sub := file_set - other.file_arcs.get(filename, set()))}
         return TestCoverage([], result_dict)
 
 
@@ -197,7 +211,8 @@ class FindDuplicateCoverage:
                         continue
                     logging.debug(file_name)
                     add_data_to_hash(data, file_name, hasher)
-                    arcs_list[file_name] = set(data.arcs(file_name))
+                    if arcs := set(data.arcs(file_name)):
+                        arcs_list[file_name] = arcs
                 if not arcs_list:
                     logging.warning("Empty arcs for %s %s", self.location, arcs_list)
                     return
@@ -216,28 +231,37 @@ class FindDuplicateCoverage:
         self.skipped = False
 
 
-
-    
 def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[TestCoverage, list[TestCoverage]]]:
     """Returns a list of sets that are fully overlapped by multiple sets."""
     sorted_sets = sorted(list_of_sets, key=len, reverse=True)
 
     fully_overlapped_sets = []
     while (big_set := sorted_sets.pop(0)) and sorted_sets:
+        # Check if this test can be replaced by others
         if not big_set.issubset(TestCoverage.union(*sorted_sets)):
             continue
+        # prepare list of tests related to this and sort it by descending related arcs size
+        related_sets = sorted([result_set for other_set in sorted_sets if (result_set := big_set & other_set)],
+                              key=len,
+                              reverse=True)
         big_set_ = copy(big_set)
         small_sets = []
-        for i in range(len(sorted_sets) - 1, -1, -1):
+        for related_set in related_sets:
             if not big_set_:
                 break
-            if big_set_ & sorted_sets[i]:
-                big_set_ -= sorted_sets[i]
-                small_sets.append(sorted_sets[i])
+            if big_set_ & related_set:
+                old = len(big_set_)
+                big_set_ -= related_set
+                """print("")
+                print(big_set_, len(big_set_))
+                print(related_set)
+                print(big_set_ & related_set)
+                print(bool(big_set_ & related_set))"""
+                assert old != len(big_set_)
+                small_sets.append(related_set)
 
         fully_overlapped_sets.append((big_set, small_sets))
     return fully_overlapped_sets
-
 
 
 # @profile
@@ -246,7 +270,7 @@ def main():
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
     # print("Hash size: ", len(hash_tests))
-    print("Duplicates:")
+    print("1. Duplicates:")
     for tests in hash_tests.values():
         if len(tests.tests_locations) == 1:
             continue
@@ -257,32 +281,33 @@ def main():
             )
         print("\n")
 
-    print("\nGod tests:")
-    for big_test, small_tests in find_fully_overlapped_sets([TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
+    print("\n2. God tests:")
+    for big_test, small_tests in find_fully_overlapped_sets(
+            [TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
         bigger_filename, bigger_linenum, bigger_test_name = big_test.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage)",
+            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage) {len(big_test)}",
         )
         for item in small_tests:
             smaller_filename, smaller_linenum, smaller_name = item.tests_locations[0]
             print(
-                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
+                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test) {len(item)}",
             )
         print("\n")
 
-    print("\nSuperseeded:")
+    print("\n3. Superseeded:")
     for coverage_hash2, tests2 in hash_tests.items():
         items = []
         for coverage_hash1, tests1 in hash_tests.items():
             if coverage_hash1 != coverage_hash2 and \
-                set(tests2.file_arcs.keys()) >= set(tests1.file_arcs.keys()) and \
+                    set(tests2.file_arcs.keys()) >= set(tests1.file_arcs.keys()) and \
                     all(arcs2_arcs >= tests1.file_arcs.get(arcs2_filename, set()) \
                         for arcs2_filename, arcs2_arcs in tests2.file_arcs.items()):
                 items.extend(tests1.tests_locations)
         if items:
             bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
             print(
-                f"{bigger_filename}:{bigger_linenum}:1: I002 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
+                f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
             )
             for item in sorted(items):
                 smaller_filename, smaller_linenum, smaller_name = item
