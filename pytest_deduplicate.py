@@ -27,7 +27,7 @@ class TestCoverage:
         tests_locations: A list of Location objects that indicate where the tests are located.
         file_arcs: A dictionary that maps filenames to sets of Arc objects that represent the executed arcs in each file.
 
-    >>> loc1 = Location(("test1.py", 10, "test1")) # A Location object with filename, start line and end line
+    >>> loc1 = Location(("test1.py", 10, "test1")) # A Location object with filename, start line and function name
     >>> loc2 = Location(("test2.py", 20, "test2"))
     >>> arc1 = Arc((1, 2)) # An Arc object with source and destination line numbers
     >>> arc2 = Arc((2, 3))
@@ -128,7 +128,7 @@ class TestCoverage:
         result_dict = {filename: and_
                        for filename, file_set in self.file_arcs.items()
                        if filename in other.file_arcs and (and_ := file_set & other.file_arcs[filename])}
-        return TestCoverage(other.tests_locations, result_dict)
+        return TestCoverage([], result_dict)
 
     def __sub__(self, other):
         """
@@ -200,7 +200,7 @@ class FindDuplicateCoverage:
                 self.coverage.stop()
                 logging.debug("Coverage stopped")
             except Exception as ex:
-                logging.exception("Exception %s", ex.args())
+                logging.exception("Exception %s", ex.args)
         if self.coverage and not self.skipped:
             try:
                 data = self.coverage.get_data()
