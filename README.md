@@ -1,17 +1,63 @@
 # pytest_deduplicate
 
-The pytest_deduplicate is designed to identify duplicate or superseeding unit tests that have the same or bigger code coverage. 
-It can be particularly useful when unit tests are automatically generated based on input/output information for a function, 
-using a large amount of available input data (for example, with the help of the auger library).
+The pytest_deduplicate helps you analyze your test suite and identify potential issues related to duplicate and overlapping tests. By utilizing code coverage information, it can pinpoint areas for improvement, leading to a more efficient and focused set of tests.
 
-This tool groups each test together based on the coverage set. 
-By invoking unit testing with this tool, it will collect code coverage for each test and generate a list of duplicate tests. 
+
+
+### **Requirements:**
+
+* Python 3.x
+* pytest or unittest
+* coverage
+
+### Installation:
+
+1. Make sure you have the required libraries installed:
+
+```
+pip install pytest coverage
+```
+
+
+### Usage:
+
+1. Run your tests with pytest and include the script as a plugin:
+
+```
+cd <working_directory>
+/path/to/this/tool/find_duplicate_coverage.py [pytest_parameters]
+```
+
+2. Review the output:
+
+The script will print three sections of information:
+
+* **Duplicates:** Lists tests with identical coverage, suggesting to keep only one.
+* **God Tests:** Identifies tests that can be split into smaller, more focused tests due to their extensive coverage.
+* **Superseded:** Points out potentially redundant tests that might be removed because their coverage is entirely contained within other tests.
+
+### Interpreting the Results:
+
+* **Duplicates:** Consider removing duplicate tests, keeping the one that is most readable or representative.
+* **God Tests:** Evaluate splitting these tests into smaller units that focus on specific functionality. This can improve test clarity and maintainability.
+* **Superseded Tests:** Assess whether these tests are truly redundant and can be safely removed. Ensure that removing them doesn't leave any functionality untested.
+
+### Additional Notes:
+
+* Consider using code coverage visualization tools in conjunction with the script for a more comprehensive understanding of your test coverage landscape.
+
+### Benefits:
+
+* **Reduced Test Suite Size:** Eliminating redundant tests leads to a more efficient test suite, saving execution time and resources.
+* **Improved Test Focus:** Breaking down large tests into smaller, more specific ones enhances clarity and maintainability.
+* **Enhanced Code Coverage Analysis:** Identifying overlaps and gaps in coverage helps you focus your testing efforts effectively.
+
+By using this script and carefully analyzing its output, you can significantly improve the quality and efficiency of your test suite.
+
+This tool groups each test together based on the coverage set.
+
+By invoking unit testing with this tool, it will collect code coverage for each test and generate a list of duplicate tests.
 However, it is important to note that false-positives may occur if, for example, there are regular expressions involved, as the code coverage in such cases may appear the same.
-
-To use simply call:
-
-    cd <working_directory>
-    pytest_deduplicate [pytest_parameters]
 
 Result example:
 
