@@ -151,8 +151,8 @@ hash_tests: dict[str, TestCoverage] = {}
 
 class FindDuplicateCoverage:
     def __init__(self) -> None:
-        self.collected = []  # list to store collected test names
-        self.location = None  # the name of the current test
+        self.collected: list[str] = []  # list to store collected test names
+        self.location: Optional[Location] = None  # the name of the current test
         self.coverage = None  # Coverage object to measure code coverage
         self.skipped = False  # flag to track if the test is skipped
         self.coverage = Coverage(branch=True, data_file=None,
@@ -173,6 +173,7 @@ class FindDuplicateCoverage:
     def start_collection(self) -> None:
         try:
             # logging.debug("Coverage created")
+            assert self.coverage
             self.coverage.erase()  # start the coverage measurement
             self.coverage.start()  # start the coverage measurement
         except:
