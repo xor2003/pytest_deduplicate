@@ -277,23 +277,23 @@ def main():
     pytest.main(sys.argv[1:], plugins=[my_plugin])
 
     # print("Hash size: ", len(hash_tests))
-    print("1. Duplicates:")
     for tests in hash_tests.values():
         if len(tests.tests_locations) == 1:
             continue
+        print("1. Duplicate tests detected with identical coverage:")
         for item in sorted(tests.tests_locations):
             file, line, name = item
             print(
-                f"{file}:{line}:1: W001 tests with same coverage: {name} consider leave only one (duplicate-test)",
+                f"{file}:{line}:1: W001 tests with same coverage: {name} consider keeping only one (duplicate-test)",
             )
         print("\n")
 
-    print("\n2. God tests:")
     for big_test, small_tests in find_fully_overlapped_sets(
             [TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
+        print('\n2. "God test" detected with broad coverage:')
         bigger_filename, bigger_linenum, bigger_test_name = big_test.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage)",
+            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be replaced by smaller tests below (bigger-coverage)",
         )
         for item in small_tests:
             smaller_filename, smaller_linenum, smaller_name = item.tests_locations[0]
@@ -302,7 +302,6 @@ def main():
             )
         print("\n")
 
-    print("\n3. Superseeded:")
     for coverage_hash2, tests2 in hash_tests.items():
         items = []
         for coverage_hash1, tests1 in hash_tests.items():
@@ -313,14 +312,16 @@ def main():
                 items.extend(tests1.tests_locations)
         if not items:
             continue
+
+        print("\n3. Superseeded tests:")
         bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
+            f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code than test(s) below (bigger-coverage)",
         )
         for item in sorted(items):
             smaller_filename, smaller_linenum, smaller_name = item
             print(
-                f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test. Consider delete (smaller-coverage)",
+                f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code than {bigger_test_name} test. Consider remove it (smaller-coverage)",
             )
         print("\n")
 

@@ -1,14 +1,20 @@
 # pytest_deduplicate
 
-The pytest_deduplicate helps you analyze your test suite and identify potential issues related to duplicate and overlapping tests. By utilizing code coverage information, it can pinpoint areas for improvement, leading to a more efficient and focused set of tests.
+The pytest_deduplicate helps you analyze your test suite and identify potential issues related to duplicate and
+overlapping tests. By utilizing code coverage information, it can pinpoint areas for improvement, leading to a more
+efficient and focused set of tests.
 
 ### Benefits:
 
-* **Reduced Test Suite Size:** Eliminating redundant tests leads to a more efficient test suite, saving execution time and resources.
-* **Improved Test Focus:** Breaking down large tests into smaller, more specific ones enhances clarity and maintainability.
-* **Enhanced Code Coverage Analysis:** Identifying overlaps and gaps in coverage helps you focus your testing efforts effectively.
+* **Reduced Test Suite Size:** Eliminating redundant tests leads to a more efficient test suite, saving execution time
+  and resources.
+* **Improved Test Focus:** Breaking down large tests into smaller, more specific ones enhances clarity and
+  maintainability.
+* **Enhanced Code Coverage Analysis:** Identifying overlaps and gaps in coverage helps you focus your testing efforts
+  effectively.
 
-By using this script and carefully analyzing its output, you can significantly improve the quality and efficiency of your test suite.
+By using this script and carefully analyzing its output, you can significantly improve the quality and efficiency of
+your test suite.
 
 ### Requirements:
 
@@ -30,28 +36,34 @@ pip install -r requirements.txt
 
 ```
 cd <working_directory>
-/path/to/this/tool/find_duplicate_coverage.py [pytest_parameters]
+/path/to/this/tool/pytest_deduplicate.py [pytest_parameters]
 ```
 
 2. Review the output:
 
 The script will print three sections of information:
 
-* **Duplicates:** Lists tests with identical coverage, suggesting to keep only one.
-* **God Tests:** Identifies tests that can be split into smaller, more focused tests due to their extensive coverage.
-* **Superseded:** Points out potentially redundant tests that might be removed because their coverage is entirely contained within other tests.
+| **Case**                                 | **Description**                                                                         | **Actionable Insights**                                                        | **Example**                                                                                 |
+|------------------------------------------|-----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| **Case 1: Duplicates**                   | Tests with identical code coverage, indicating redundancy.                              | Remove duplicate tests, keeping the most readable or representative one.       | `TestSimple.test_even0` and `TestSimple.test_even2` have identical coverage.                |
+| **Case 2: Broad Coverage ("God Tests")** | Tests that cover too much functionality, making them harder to maintain and understand. | Split into smaller, focused tests to improve clarity and maintainability.      | `TestSimple.test_evenodd` can be split into smaller tests like `test_even0` and `test_odd`. |
+| **Case 3: Superseded Tests**             | Tests whose coverage is entirely contained within another test, making them redundant.  | Remove smaller tests if the larger test sufficiently covers the functionality. | `TestSimple.test_evenodd` supersedes `test_even0`, `test_even2`, and `test_odd`.            |
 
 ### Interpreting the Results:
 
 * **Duplicates:** Consider removing duplicate tests, keeping the one that is most readable or representative.
-* **God Tests:** Evaluate splitting these tests into smaller units that focus on specific functionality. This can improve test clarity and maintainability.
-* **Superseded Tests:** Assess whether these tests are truly redundant and can be safely removed. Ensure that removing them doesn't leave any functionality untested.
+* **God Tests:** Evaluate splitting these tests into smaller units that focus on specific functionality. This can
+  improve test clarity and maintainability.
+* **Superseded Tests:** Assess whether these tests are truly redundant and can be safely removed. Ensure that removing
+  them doesn't leave any functionality untested.
 
-However, it is important to note that false-positives may occur if, for example, there are regular expressions involved, as the code coverage in such cases may appear the same.
+However, it is important to note that false-positives may occur if, for example, there are regular expressions involved,
+as the code coverage in such cases may appear the same.
 
 ### Additional Notes:
 
-* Consider using code coverage visualization tools in conjunction with the script for a more comprehensive understanding of your test coverage landscape.
+* Consider using code coverage visualization tools in conjunction with the script for a more comprehensive understanding
+  of your test coverage landscape.
 
 ### Result example:
 
