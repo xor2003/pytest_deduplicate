@@ -4,7 +4,7 @@ import os
 import sys
 from copy import copy
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Optional
 
 import pytest
 from _pytest.unittest import TestCaseFunction
@@ -176,7 +176,8 @@ class FindDuplicateCoverage:
             assert self.coverage
             self.coverage.erase()  # start the coverage measurement
             self.coverage.start()  # start the coverage measurement
-        except:
+        except Exception:
+            logging.exception("Exception while starting coverage")
             self.coverage = None
 
     # @profile
@@ -200,8 +201,8 @@ class FindDuplicateCoverage:
             try:
                 self.coverage.stop()
                 logging.debug("Coverage stopped")
-            except Exception as ex:
-                logging.exception("Exception %s", ex.args)
+            except Exception:
+                logging.exception("Exception while stopping coverage")
         if self.coverage and not self.skipped:
             try:
                 data = self.coverage.get_data()
@@ -226,8 +227,8 @@ class FindDuplicateCoverage:
                     hash_tests[text_hash] = TestCoverage(tests_locations=[self.location], file_arcs=arcs_list)
                 logging.debug("Coverage collected")
 
-            except Exception as ex:
-                logging.exception("Exception %s", ex.args())
+            except Exception:
+                logging.exception("Exception while processing coverage")
         self.location = None
         self.skipped = False
 
@@ -305,18 +306,21 @@ def main():
                     all(arcs2_arcs >= tests1.file_arcs.get(arcs2_filename, set()) \
                         for arcs2_filename, arcs2_arcs in tests2.file_arcs.items()):
                 items.extend(tests1.tests_locations)
-        if items:
-            bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
+        if not items:
+            continue
+        bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
+        print(
+            f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
+        )
+        for item in sorted(items):
+            smaller_filename, smaller_linenum, smaller_name = item
             print(
-                f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code when test(s) below (bigger-coverage)",
+                f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test. Consider delete (smaller-coverage)",
             )
-            for item in sorted(items):
-                smaller_filename, smaller_linenum, smaller_name = item
-                print(
-                    f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code when {bigger_test_name} test. Consider delete (smaller-coverage)",
-                )
-            print("\n")
+        print("\n")
 
 
 if __name__ == "__main__":
+    #import doctest
+    #doctest.testmod(verbose=True)
     main()
