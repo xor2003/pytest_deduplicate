@@ -51,7 +51,7 @@ class TestCoverage:
     True
     """
 
-    tests_locations: list[Location]
+    tests_locations: set[Location]
     file_arcs: dict[str, set[Arc]]
 
     def __len__(self):
@@ -221,6 +221,7 @@ class FindDuplicateCoverage:
                 text_hash = hasher.hexdigest()
 
                 logging.debug(text_hash)
+
                 if text_hash in hash_tests:
                     hash_tests[text_hash].tests_locations.append(self.location)
                 else:
@@ -243,14 +244,17 @@ def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[T
         if not big_set.issubset(TestCoverage.union(*sorted_sets)):
             continue
         # prepare list of tests related to this and sort it by descending related arcs size
-        related_sets = sorted([result_set for other_set in sorted_sets if (result_set := big_set & other_set)],
+        related_sets = sorted([other_set for other_set in sorted_sets if other_set & big_set],
                               key=len,
                               reverse=True)
+
         big_set_ = copy(big_set)
-        small_sets = []
+
+        small_sets: list[TestCoverage] = []
         for related_set in related_sets:
             if not big_set_:
                 break
+            assert big_set_ & related_set
             if big_set_ & related_set:
                 old = len(big_set_)
                 big_set_ -= related_set
@@ -262,7 +266,8 @@ def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[T
                 assert old != len(big_set_)
                 small_sets.append(related_set)
 
-        fully_overlapped_sets.append((big_set, small_sets))
+        if not big_set_:
+            fully_overlapped_sets.append((big_set, small_sets))
     return fully_overlapped_sets
 
 
@@ -288,12 +293,12 @@ def main():
             [TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
         bigger_filename, bigger_linenum, bigger_test_name = big_test.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage) {len(big_test)}",
+            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be splitted and replaced by smaller tests below (bigger-coverage)",
         )
         for item in small_tests:
             smaller_filename, smaller_linenum, smaller_name = item.tests_locations[0]
             print(
-                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test) {len(item)}",
+                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
             )
         print("\n")
 
