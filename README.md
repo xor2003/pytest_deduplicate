@@ -6,7 +6,7 @@ Matching coverage does **not** prove equivalent assertions, inputs, side effects
 
 ## Install and run
 
-Requires Python 3.9+, pytest 7.4+ and coverage.py 7.6+.
+Requires Python 3.9+, pytest 7.4.4+ and coverage.py 7.6.1+.
 
 ```sh
 pip install .

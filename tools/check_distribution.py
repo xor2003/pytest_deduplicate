@@ -20,7 +20,7 @@ RELEASE_FILES = ("pyproject.toml", "README.md", "LICENSE", "pytest_deduplicate.p
 
 def main():
     with tempfile.TemporaryDirectory(prefix="pytest-deduplicate-wheel-") as temp:
-        work = Path(temp)
+        work = Path(temp).resolve()
         source = work / "source"
         source.mkdir()
         for name in RELEASE_FILES:
@@ -47,7 +47,7 @@ def main():
             env.pop(key, None)
         installed = subprocess.check_output([str(python), "-c", "import pytest_deduplicate; print(pytest_deduplicate.__file__)"],
                                             cwd=consumer, env=env, text=True).strip()
-        assert Path(installed).is_relative_to(envdir), installed
+        assert Path(installed).resolve().is_relative_to(envdir), installed
         result = subprocess.run([str(command), "--source", "product.py", "--collector", "contexts",
                                  "--stability-runs", "1", "--max-candidates", "1", "--mutations", "1",
                                  "--json", "-", "-q", "-p", "no:cacheprovider"],

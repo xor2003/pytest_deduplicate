@@ -9,7 +9,7 @@ description = "Reports observed test coverage overlap with optional stability an
 authors = [
     {name = "xor2003", email = "xor2003@gmx.com"},
 ]
-dependencies = ["pytest>=7.4", "coverage>=7.6"]
+dependencies = ["pytest>=7.4.4", "coverage>=7.6.1"]
 requires-python = ">=3.9"
 readme = "README.md"
 license = {text = "GPL"}
