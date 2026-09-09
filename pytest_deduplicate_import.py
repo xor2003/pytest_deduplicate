@@ -27,6 +27,22 @@ def pytest_addoption(parser):
     group.addoption('--deduplicate-coverage-file', default='.coverage', help='final combined pytest-cov data file')
 
 
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_load_initial_conftests(early_config, parser, args):
+    # Wrap pytest-cov's startup, before it constructs Coverage on master/workers.
+    # Explicit contexts need the tracing core on Python 3.14 as well.
+    if getattr(early_config.known_args_namespace, 'deduplicate_outcomes', None):
+        previous = os.environ.get('COVERAGE_CORE')
+        os.environ['COVERAGE_CORE'] = 'ctrace'
+        def restore_core():
+            if previous is None:
+                os.environ.pop('COVERAGE_CORE', None)
+            else:
+                os.environ['COVERAGE_CORE'] = previous
+        early_config.add_cleanup(restore_core)
+    yield
+
+
 def pytest_configure(config):
     if config.getoption('deduplicate_outcomes'):
         config.pluginmanager.register(OutcomeManifest(config), 'deduplicate-outcomes-recorder')
@@ -39,6 +55,16 @@ class OutcomeManifest:
         self.excluded = {}
         self.tests = {}
         self.errors = []
+        self.core = None
+        self.worker_cores = []
+
+    @pytest.hookimpl(trylast=True)
+    def pytest_sessionstart(self, session):
+        plugin = self.config.pluginmanager.get_plugin('_cov')
+        try:
+            self.core = dict(plugin.cov_controller.cov.sys_info()).get('core')
+        except AttributeError:
+            pass
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, items):
@@ -64,6 +90,7 @@ class OutcomeManifest:
     def pytest_testnodedown(self, node, error):
         if error:
             self.errors.append('worker did not finish normally')
+        self.worker_cores.append(node.workeroutput.get('deduplicate_core'))
         if 'deduplicate_excluded' not in node.workeroutput:
             self.errors.append('worker did not provide test-body exclusions')
         for path, lines in node.workeroutput.get('deduplicate_excluded', {}).items():
@@ -83,17 +110,21 @@ class OutcomeManifest:
         excluded = {p: sorted(lines) for p, lines in self.excluded.items()}
         if hasattr(self.config, 'workerinput'):
             self.config.workeroutput['deduplicate_excluded'] = excluded
+            self.config.workeroutput['deduplicate_core'] = self.core
             return
         target = Path(self.config.getoption('deduplicate_coverage_file')).resolve()
         result = {'schema_version': 1, 'root': str(Path.cwd().resolve()),
                   'pytest_exit_code': int(exitstatus), 'expected': sorted(self.expected),
                   'tests': list(self.tests.values()), 'excluded_test_lines': excluded,
-                  'coverage_file': str(target), 'errors': self.errors}
+                  'coverage_file': str(target), 'errors': self.errors,
+                  'coverage_cores': [self.core, *self.worker_cores]}
         try:
             if (not self.config.getoption('cov_source', default=None)
                     or self.config.getoption('no_cov', default=False)
                     or self.config.getoption('cov_append', default=False)):
                 raise ValueError('an active fresh non-append pytest-cov run is required')
+            if any(core not in ('CTracer', 'PyTracer') for core in result['coverage_cores']):
+                raise ValueError('full context arcs require a tracing core on every worker')
             cov_plugin = self.config.pluginmanager.get_plugin('_cov')
             live_data_file = cov_plugin.cov_controller.cov.get_option('run:data_file')
             if Path(live_data_file).resolve() != target:
@@ -119,6 +150,9 @@ def import_coverage(plugin, coverage_file, manifest_file):
     manifest = json.loads(Path(manifest_file).read_text())
     if manifest.get('schema_version') != 1 or manifest.get('errors') or manifest.get('pytest_exit_code') != 0:
         raise ValueError('outcome manifest is incomplete or unsuccessful')
+    cores = manifest.get('coverage_cores', [])
+    if not cores or any(core not in ('CTracer', 'PyTracer') for core in cores):
+        raise ValueError('manifest does not verify tracing cores; regenerate coverage with the companion plugin')
     if manifest.get('root') != str(Path.cwd().resolve()):
         raise ValueError('import must use the recorded project root')
     if digest(coverage_file) != manifest.get('coverage_sha256'):

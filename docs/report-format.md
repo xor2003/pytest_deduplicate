@@ -52,7 +52,8 @@ Benchmark results contain raw `samples_seconds`, `median_seconds`, `overhead_per
   repeated outcomes and `confirmation_runs` their budget. Snapshot-limit failure
   remains incomplete evidence.
 - `import`: coverage digest and attribution/inventory checks. Coverage must be
-  generated with the `pytest_deduplicate_import` companion outcome plugin.
+  generated with the `pytest_deduplicate_import` companion outcome plugin, which
+  records and validates actual tracing cores for the main process and workers.
 - `evidence`: source/test file hashes plus scope and inventory hashes. Missing
   files have null hashes and prevent valid reviewed suppressions.
 - Each finding has stable `id`, `evidence_sha256`, and optional `review` with

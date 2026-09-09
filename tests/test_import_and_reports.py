@@ -21,6 +21,8 @@ def test_import_real_pytest_cov_and_reject_stale_data(tmp_path, workers):
     env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
                PYTHONPATH=str(Path(__file__).resolve().parents[1]))
     env.pop('PYTEST_ADDOPTS', None)
+    # The companion must override a backend that lacks full explicit contexts.
+    env['COVERAGE_CORE'] = 'sysmon'
     command = [sys.executable, '-m', 'pytest', '-q', '-p', 'pytest_cov.plugin', '-p', 'xdist.plugin',
                '-p', 'pytest_deduplicate_import', '--cov=product', '--cov-branch', '--cov-context=test',
                '--deduplicate-outcomes=outcomes.json']
@@ -30,6 +32,7 @@ def test_import_real_pytest_cov_and_reject_stale_data(tmp_path, workers):
     assert run.returncode == 0, run.stdout + run.stderr
     manifest = json.loads((tmp_path / 'outcomes.json').read_text())
     assert manifest['errors'] == [], manifest
+    assert all(core in ('CTracer', 'PyTracer') for core in manifest['coverage_cores'])
     result = run_suite(tmp_path, {}, '--source', 'product.py', '--import-coverage', '.coverage',
                        '--outcomes', 'outcomes.json', '--json', 'report.json')
     assert result.returncode == 0, result.stdout + result.stderr

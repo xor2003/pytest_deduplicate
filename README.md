@@ -112,7 +112,9 @@ pytest_deduplicate --source src --import-coverage .coverage --outcomes outcomes.
 ```
 
 `--deduplicate-coverage-file PATH` selects a nondefault final combined data file.
-The companion binds outcomes to its SHA-256, collected inventory, source/test
+The companion selects a tracing core before pytest-cov starts, including on
+Python 3.14 and xdist workers, and verifies the actual cores in the manifest.
+It binds outcomes to the data file SHA-256, collected inventory, source/test
 hashes and project root. Import rejects mismatches, missing phases, worker
 failures, retries, stale contexts and line-only data. Import from the recorded
 root before editing source. Missing explicit phase contexts are `null`, not
