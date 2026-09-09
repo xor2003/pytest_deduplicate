@@ -190,3 +190,14 @@ def test_configured_sysmon_cannot_disable_context_measurement(tmp_path):
     report = load_report(tmp_path)
     assert report["findings"][0]["kind"] == "identical"
     assert all(test["file_arcs"] == {"product.py": [[-1, 2], [2, -1]]} for test in report["tests"])
+
+
+def test_report_paths_on_another_windows_drive():
+    import os
+    from pathlib import Path
+    from pytest_deduplicate import report_path
+    if os.name != "nt":
+        pytest.skip("Windows drive-relative path behavior")
+    other_drive = "Y" if Path.cwd().drive.upper().startswith("Z") else "Z"
+    external = Path(other_drive + ":/example/product.py").resolve()
+    assert report_path(external) == str(external)

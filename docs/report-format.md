@@ -1,6 +1,6 @@
 # JSON report version 1
 
-`--json PATH` writes one object. `--json -` emits that object without pytest/text-report output on stdout. Paths in coverage evidence are relative to `root`; paths outside the project may contain `..` when source scope is unrestricted. Arc endpoints are coverage.py line numbers, with negative entry/exit markers preserved.
+`--json PATH` writes one object. `--json -` emits that object without pytest/text-report output on stdout. Paths in coverage evidence are relative to `root` where possible; paths outside the project may contain `..`, or remain absolute on a different Windows drive. Arc endpoints are coverage.py line numbers, with negative entry/exit markers preserved.
 
 Top-level fields:
 

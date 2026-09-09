@@ -335,8 +335,17 @@ def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[T
     return fully_overlapped_sets
 
 
+def report_path(path):
+    path = Path(path).resolve()
+    try:
+        return os.path.relpath(path, Path.cwd().resolve())
+    except ValueError:
+        # Windows has no relative path between different drives.
+        return str(path)
+
+
 def serialize_arcs(file_arcs):
-    return {os.path.relpath(Path(path).resolve(), Path.cwd().resolve()): [list(arc) for arc in sorted(arcs)]
+    return {report_path(path): [list(arc) for arc in sorted(arcs)]
             for path, arcs in sorted(file_arcs.items()) if arcs}
 
 
@@ -375,7 +384,7 @@ def build_report(plugin, exit_code, elapsed):
                 [by_identity[id(cov)].ids[0] for cov in small])
     return {"schema_version": 1, "root": os.getcwd(), "collector": plugin.collector,
             "pytest_exit_code": int(exit_code), "elapsed": elapsed, "errors": plugin.errors,
-            "scope": {"source": [os.path.relpath(p) for p in plugin.source],
+            "scope": {"source": [report_path(p) for p in plugin.source],
                       "omit": plugin.coverage.get_option("run:omit")},
             "warning": "Coverage overlap candidates only; matching coverage does not prove equivalent assertions.",
             "tests": tests, "findings": findings}
