@@ -1,0 +1,40 @@
+{
+  "workload": "parameterized integer branch, one application module",
+  "tests": 200,
+  "runs": 3,
+  "python": "3.12.3",
+  "platform": "Linux",
+  "pytest": "9.0.1",
+  "coverage": "7.12.0",
+  "benchmark": {
+    "coverage_and_outcome_parity": true,
+    "failures": [],
+    "median_seconds": {
+      "contexts": 0.7871774919331074,
+      "off": 0.4706896892748773,
+      "restart": 1.4629359249956906
+    },
+    "note": "Fresh-process wall times include interpreter and pytest startup; no automatic default change.",
+    "overhead_percent": {
+      "contexts": 67.23916199349861,
+      "restart": 210.80687729731702
+    },
+    "samples_seconds": {
+      "contexts": [
+        0.7871774919331074,
+        0.7728285687044263,
+        0.7928837612271309
+      ],
+      "off": [
+        0.4706896892748773,
+        0.4862813618965447,
+        0.45984654081985354
+      ],
+      "restart": [
+        1.4511775630526245,
+        1.4629359249956906,
+        1.4839371647685766
+      ]
+    }
+  }
+}

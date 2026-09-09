@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pytest_deduplicate"
 version = "0.1.6"
-description = "Identifies duplicate unit tests"
+description = "Reports observed test coverage overlap with optional stability and mutation checks"
 authors = [
     {name = "xor2003", email = "xor2003@gmx.com"},
 ]
-dependencies = ["pytest","coverage"]
-requires-python = ">=3.8"
+dependencies = ["pytest>=7.4", "coverage>=7.6"]
+requires-python = ">=3.9"
 readme = "README.md"
 license = {text = "GPL"}
 keywords = ["duplicate test detection","test optimization", "test efficiency"]
@@ -21,8 +21,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Testing :: Unit",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Quality Assurance"
@@ -37,6 +39,10 @@ tag-date = 0
 
 [tool.setuptools]
 include-package-data = false
+py-modules = ["pytest_deduplicate", "pytest_deduplicate_checks"]
 
 [project.scripts]
 pytest_deduplicate = "pytest_deduplicate:main"
+
+[project.optional-dependencies]
+dev = ["build>=1", "wheel"]
