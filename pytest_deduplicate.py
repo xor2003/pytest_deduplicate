@@ -15,7 +15,7 @@ from typing import Optional
 
 import pytest
 from coverage import Coverage
-from coverage.exceptions import ConfigError
+from coverage.exceptions import ConfigError, CoverageException
 
 Arc = tuple[int, int]
 Location = tuple[str, Optional[int], str]
@@ -156,7 +156,9 @@ def coverage_signature(file_arcs):
 
 
 class FindDuplicateCoverage:
-    def __init__(self, source=(), omit=(), collector="contexts", selected=None, order=None):
+    def __init__(self, source=(), omit=(), collector="contexts", selected=None, order=None, coverage_phase="all"):
+        self.coverage_phase = coverage_phase
+        self.phase_contexts = {}
         self.groups = {}
         self.observations = []
         self.test_lines = {}
@@ -181,8 +183,7 @@ class FindDuplicateCoverage:
                 raise pytest.UsageError("Remove COVERAGE_CORE=sysmon: full per-test arcs require a tracing core")
         configured_omit = self.coverage.get_option("run:omit") or []
         self.coverage.set_option("run:omit", [*configured_omit, *omit,
-                                 os.path.abspath(__file__),
-                                 str(Path(__file__).with_name("pytest_deduplicate_checks.py"))])
+                                 str(Path(__file__).with_name('pytest_deduplicate*.py'))])
         if self.source:
             self.coverage.set_option("run:source", sorted({str(p if p.is_dir() else p.parent)
                                                           for p in self.source}))
@@ -235,6 +236,7 @@ class FindDuplicateCoverage:
         self.nodeid = item.nodeid
         self.location = (file, line, item.nodeid.split("::", 1)[-1])
         self.reports = []
+        self.phase_contexts = {}
         started = False
         try:
             if self.collector != "off":
@@ -265,7 +267,13 @@ class FindDuplicateCoverage:
                     if self.collector == "restart":
                         self.coverage.stop()
                         self.running = False
-                    observation["file_arcs"] = self.collect_coverage(passed)
+                    observation['phase_file_arcs'] = {
+                        phase: self.collect_coverage(False, self.phase_contexts.get(phase, '__unmeasured__'))
+                        for phase in ('setup', 'call', 'teardown')}
+                    if self.coverage_phase == 'call':
+                        observation['file_arcs'] = observation['phase_file_arcs']['call']
+                    else:
+                        observation["file_arcs"] = self.collect_coverage(passed)
             except Exception as exc:
                 self.errors.append(str(exc))
                 logging.exception("Unable to process coverage")
@@ -275,6 +283,34 @@ class FindDuplicateCoverage:
                     self.coverage.switch_context("")
                 self.observations.append(observation)
                 self.location = None
+
+    def phase_context(self, phase):
+        if self.running:
+            # JSON encoding avoids collisions with arbitrary parameterized node IDs.
+            context = json.dumps([self.nodeid, phase], separators=(',', ':'))
+            self.phase_contexts[phase] = context
+            self.coverage.switch_context(context)
+
+    @pytest.hookimpl(hookwrapper=True, tryfirst=True)
+    def pytest_runtest_setup(self, item):
+        self.phase_context('setup')
+        yield
+        if self.running:
+            self.coverage.switch_context(self.nodeid)
+
+    @pytest.hookimpl(hookwrapper=True, tryfirst=True)
+    def pytest_runtest_call(self, item):
+        self.phase_context('call')
+        yield
+        if self.running:
+            self.coverage.switch_context(self.nodeid)
+
+    @pytest.hookimpl(hookwrapper=True, tryfirst=True)
+    def pytest_runtest_teardown(self, item, nextitem):
+        self.phase_context('teardown')
+        yield
+        if self.running:
+            self.coverage.switch_context(self.nodeid)
 
     def pytest_sessionfinish(self, session, exitstatus):
         self.close()
@@ -289,10 +325,14 @@ class FindDuplicateCoverage:
         outcome = yield
         self.reports.append(outcome.get_result())
 
-    def collect_coverage(self, eligible=True):
+    def collect_coverage(self, eligible=True, context=None):
+        import re
         data = self.coverage.get_data()
-        if self.collector == "contexts":
-            data.set_query_context(self.nodeid)
+        if context is not None:
+            data.set_query_context(context)
+        elif self.collector == "contexts":
+            data.set_query_contexts(['^' + re.escape(c) + '$'
+                                    for c in [self.nodeid, *self.phase_contexts.values()]])
         file_arcs = {}
         try:
             for filename in sorted(data.measured_files()):
@@ -318,10 +358,12 @@ class FindDuplicateCoverage:
 def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[TestCoverage, list[TestCoverage]]]:
     """Returns a list of sets that are fully overlapped by multiple sets."""
     sorted_sets = sorted((cov for cov in list_of_sets if cov), key=len, reverse=True)
+    from pytest_deduplicate_index import ArcIndex
+    inverted = ArcIndex(sorted_sets)
     fully_overlapped_sets = []
     for index, big_set in enumerate(sorted_sets):
         # Only genuinely smaller observations belong in this report.
-        candidates = [cov for cov in sorted_sets[index + 1:] if len(cov) < len(big_set)]
+        candidates = [sorted_sets[i] for i in inverted.overlapping_smaller(index)]
         remaining = big_set
         small_sets = []
         for candidate in candidates:
@@ -354,6 +396,9 @@ def build_report(plugin, exit_code, elapsed):
     groups = {}
     for observation in plugin.observations:
         test = dict(observation, file_arcs=serialize_arcs(observation["file_arcs"]))
+        if 'phase_file_arcs' in observation:
+            test['phase_file_arcs'] = {phase: serialize_arcs(arcs) if arcs is not None else None
+                                       for phase, arcs in observation['phase_file_arcs'].items()}
         test["arc_count"] = sum(map(len, test["file_arcs"].values()))
         tests.append(test)
         if observation["eligible"] and observation["file_arcs"]:
@@ -374,17 +419,18 @@ def build_report(plugin, exit_code, elapsed):
     for group in representatives:
         if len(group.ids) > 1:
             finding("identical", group.coverage, group.coverage, group.ids, [])
-    for left in representatives:
-        for right in representatives:
-            if left is not right and left.coverage.issubset(right.coverage):
-                finding("contained", left.coverage, right.coverage, left.ids, right.ids)
+    from pytest_deduplicate_index import ArcIndex
+    inverted = ArcIndex([group.coverage for group in representatives])
+    for left_index, right_index in inverted.containment_pairs():
+        left, right = representatives[left_index], representatives[right_index]
+        finding("contained", left.coverage, right.coverage, left.ids, right.ids)
     by_identity = {id(group.coverage): group for group in representatives}
     for big, small in find_fully_overlapped_sets([group.coverage for group in representatives]):
         finding("combined", big, TestCoverage.union(*small), by_identity[id(big)].ids,
                 [by_identity[id(cov)].ids[0] for cov in small])
     return {"schema_version": 1, "root": os.getcwd(), "collector": plugin.collector,
             "pytest_exit_code": int(exit_code), "elapsed": elapsed, "errors": plugin.errors,
-            "scope": {"source": [report_path(p) for p in plugin.source],
+            "scope": {"coverage_phase": plugin.coverage_phase, "source": [report_path(p) for p in plugin.source],
                       "omit": plugin.coverage.get_option("run:omit")},
             "warning": "Coverage overlap candidates only; matching coverage does not prove equivalent assertions.",
             "tests": tests, "findings": findings}
@@ -407,6 +453,7 @@ def print_report(report):
             print(f"{location['file']}:{location['line']}:1: {codes[finding['kind']]} {nodeid}: "
                   f"{finding['kind']} observed coverage; review assertions and inputs "
                   f"({test['duration']:.6f}s, {test['arc_count']} arcs)")
+        print("  Assessment: " + finding.get("assessment", {}).get("status", "unchecked"))
         if finding["other_tests"]:
             print("  Compared with: " + ", ".join(finding["other_tests"]))
         print(f"  Shared: {finding['shared_arc_count']} arcs; unique: {finding['unique_arc_count']}; "
@@ -438,19 +485,35 @@ def parse_args(args):
     parser.add_argument("--source", action="append", default=[], metavar="PATH", help="application file/directory; repeatable")
     parser.add_argument("--omit", action="append", default=[], metavar="GLOB", help="exclude measured files; repeatable")
     parser.add_argument("--json", metavar="PATH", help="write JSON report; - writes only JSON to stdout")
+    parser.add_argument('--coverage-phase', choices=['all', 'call'], default='all',
+                        help='compare all observed phases or test call only')
     parser.add_argument("--collector", choices=["restart", "contexts"], default="contexts")
     parser.add_argument("--stability-runs", type=int, default=0, metavar="N")
     parser.add_argument("--mutations", type=int, default=0, metavar="N", help="experimental maximum number of sampled mutants")
+    parser.add_argument('--mutation-repeats', type=int, default=2, help='fresh copies per mutant/test (at least 2)')
+    parser.add_argument('--mutation-snapshot-mb', type=int, default=256, help='maximum project snapshot size')
     parser.add_argument("--max-candidates", type=int, default=20)
     parser.add_argument("--check-timeout", type=float, default=30)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--benchmark-collectors", type=int, default=0, metavar="N")
+    parser.add_argument('--html', metavar='PATH', help='standalone interactive report')
+    parser.add_argument('--baseline', metavar='PATH', help='compare with a prior JSON report')
+    parser.add_argument('--suppressions', metavar='PATH', help='reviewed findings with reason and evidence hash')
+    parser.add_argument('--review-template', metavar='PATH', help='write an unreviewed suppression template')
+    parser.add_argument('--import-coverage', metavar='PATH', help='read combined pytest-cov data without running tests')
+    parser.add_argument('--outcomes', metavar='PATH', help='coverage-bound companion manifest')
     parser.add_argument("--_request", help=argparse.SUPPRESS)
     options, pytest_args = parser.parse_known_args(args)
     if min(options.stability_runs, options.mutations, options.benchmark_collectors) < 0:
         parser.error("check counts must be nonnegative")
+    if options.mutation_repeats < 2 or options.mutation_snapshot_mb < 1:
+        parser.error('mutation-repeats must be at least 2; snapshot limit must be positive')
     if options.max_candidates < 1 or not 0 < options.check_timeout < float("inf"):
         parser.error("max-candidates and check-timeout must be positive and finite")
+    if bool(options.import_coverage) != bool(options.outcomes):
+        parser.error('--import-coverage and --outcomes must be supplied together')
+    if options.import_coverage and (options.stability_runs or options.mutations or options.benchmark_collectors or pytest_args):
+        parser.error('import accepts analysis options only; rerun checks on a live baseline')
     for path in options.source:
         if not Path(path).exists():
             parser.error("source does not exist: " + path)
@@ -470,23 +533,53 @@ def main(args=None):
         options.source = request["source"]
         options.omit = request["omit"]
         options.collector = request["collector"]
+        options.coverage_phase = request.get('coverage_phase', 'all')
         options.json = request["output"]
         selected, order = request.get("selected"), request.get("order")
     started = time.perf_counter()
-    plugin = FindDuplicateCoverage(options.source, options.omit, options.collector, selected, order)
+    plugin = FindDuplicateCoverage(options.source, options.omit, options.collector, selected, order, options.coverage_phase)
+    imported = None
     try:
-        with redirect_stdout(sys.stderr if options.json == "-" else sys.stdout):
-            exit_code = pytest.main(pytest_args, plugins=[plugin])
+        if options.import_coverage:
+            from pytest_deduplicate_import import import_coverage
+            try:
+                imported = import_coverage(plugin, options.import_coverage, options.outcomes)
+                exit_code = 0
+            except (OSError, ValueError, KeyError, TypeError, CoverageException) as exc:
+                plugin.observations.clear()
+                plugin.errors.append('Coverage import failed: ' + str(exc))
+                exit_code = 2
+        else:
+            with redirect_stdout(sys.stderr if options.json == "-" else sys.stdout):
+                exit_code = pytest.main(pytest_args, plugins=[plugin])
     finally:
         plugin.close()
     report = build_report(plugin, exit_code, time.perf_counter() - started)
+    if imported:
+        report['import'] = imported
     if not options._request and (options.stability_runs or options.mutations or options.benchmark_collectors):
         from pytest_deduplicate_checks import run_checks
         try:
             run_checks(report, options, pytest_args)
         except (OSError, ValueError) as exc:
             report["errors"].append("Optional check failed: " + str(exc))
+    from pytest_deduplicate_review import assess_findings
+    assess_findings(report)
+    from pytest_deduplicate_artifacts import decorate, compare_reports, apply_reviews, review_template, write_html
+    decorate(report)
+    try:
+        if options.baseline:
+            report['comparison'] = compare_reports(report, json.loads(Path(options.baseline).read_text()))
+        if options.suppressions:
+            apply_reviews(report, json.loads(Path(options.suppressions).read_text()))
+        if options.review_template:
+            Path(options.review_template).write_text(json.dumps(review_template(report), indent=2) + '\n')
+    except (OSError, ValueError, KeyError, TypeError, CoverageException) as exc:
+        report['errors'].append('Report review failed: ' + str(exc))
+        assess_findings(report)
     report["exit_code"] = int(exit_code) or (1 if report["errors"] else 0)
+    if options.html:
+        write_html(report, options.html)
     if options.json:
         content = json.dumps(report, indent=2, sort_keys=True) + "\n"
         if options.json == "-":

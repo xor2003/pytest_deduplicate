@@ -15,7 +15,7 @@ import venv
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_FILES = ("pyproject.toml", "README.md", "LICENSE", "pytest_deduplicate.py", "pytest_deduplicate_checks.py")
+RELEASE_FILES = ("pyproject.toml", "README.md", "LICENSE", "pytest_deduplicate.py", "pytest_deduplicate_checks.py", "pytest_deduplicate_review.py", "pytest_deduplicate_import.py", "pytest_deduplicate_index.py", "pytest_deduplicate_artifacts.py")
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
         wheel, = (work / "dist").glob("*.whl")
         with zipfile.ZipFile(wheel) as archive:
             assert "pytest_deduplicate.py" in archive.namelist()
-            assert "pytest_deduplicate_checks.py" in archive.namelist()
+            assert {name for name in RELEASE_FILES if name.endswith('.py')} <= set(archive.namelist())
             assert not any(name.endswith((".so", ".pyd", ".pyx")) for name in archive.namelist())
         envdir = work / "venv"
         venv.EnvBuilder(with_pip=True, system_site_packages=True).create(envdir)
@@ -49,7 +49,8 @@ def main():
                                             cwd=consumer, env=env, text=True).strip()
         assert Path(installed).resolve().is_relative_to(envdir), installed
         result = subprocess.run([str(command), "--source", "product.py", "--collector", "contexts",
-                                 "--stability-runs", "1", "--max-candidates", "1", "--mutations", "1",
+                                 "--stability-runs", "1", "--max-candidates", "2", "--mutations", "1",
+                                 "--html", "report.html", "--review-template", "reviews.json",
                                  "--json", "-", "-q", "-p", "no:cacheprovider"],
                                 cwd=consumer, env=env, text=True, capture_output=True, timeout=60)
         assert result.returncode == 0, result.stdout + result.stderr
@@ -57,6 +58,10 @@ def main():
         assert report["findings"][0]["kind"] == "identical"
         assert report["stability"]["tests"]
         assert report["mutations"]["mutants"]
+        assert report['findings'][0]['assessment']['status'] == 'different_fault_detection'
+        assert report['tests'][0]['phase_file_arcs']['call']
+        assert (consumer / 'report.html').exists()
+        assert json.loads((consumer / 'reviews.json').read_text())['reviews']
         (consumer / "test_example.py").write_text("def test_fail():\n    assert False\n")
         failed = subprocess.run([str(command), "-q"], cwd=consumer, env=env, capture_output=True)
         assert failed.returncode == 1

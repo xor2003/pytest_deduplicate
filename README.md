@@ -57,7 +57,7 @@ For each repetition, selected candidates run individually in fresh processes. Wh
 
 Results distinguish `stable_in_checked_runs`, `unstable` and `inconclusive`. A stable result covers only the checked scenarios. Tests that depend on an initializer outside the candidate set can fail when isolated; this is useful evidence of an order dependency, not a duplicate verdict.
 
-`--max-candidates N` limits optional checks to the first N candidates in collection order (default 20). Unchecked candidates are listed explicitly. `--check-timeout SECONDS` bounds each fresh-process test invocation (default 30). Stability checks rerun tests in the current project and can repeat their normal side effects.
+`--max-candidates N` bounds optional checks (default 20). Selection prioritizes complete comparisons, new test modules, measured duration and overlap. Oversized identical groups can contribute useful pairs; combined comparisons stay whole. A budget of one selects no tests. `selection` records reasons and incomplete groups; unchecked tests are explicit. `--check-timeout SECONDS` bounds each fresh-process test invocation (default 30). Stability checks rerun tests in the current project and can repeat their normal side effects.
 
 ## Sample fault detection (experimental)
 
@@ -65,9 +65,9 @@ Results distinguish `stable_in_checked_runs`, `unstable` and `inconclusive`. A s
 pytest_deduplicate --source src --mutations 10 --max-candidates 5 --json faults.json
 ```
 
-The built-in sampler makes independent, single-line changes to arithmetic/comparison operators and integer/boolean constants on observed source lines. This is a bounded fault sample, not a complete mutation-testing engine or a mutmut integration.
+The seeded sampler distributes its budget across file/function/operator buckets and makes independent, single-line changes to arithmetic/comparison operators and integer/boolean constants on observed source lines. This is a bounded fault sample, not a complete mutation-testing engine or a mutmut integration.
 
-Mutation sources must be inside the current project directory. The checker copies the project into a temporary directory, verifies each candidate against an unchanged copy, and runs each test/mutant trial in a fresh copy and process. The original source is never patched. Caches, virtual environments, build output and common metadata directories are excluded from copies. Tests that depend on these excluded files, external editable installations, or a different working directory may have inconclusive baselines. A temporary copy is not an OS security sandbox: tests retain their usual network and external-filesystem access.
+Mutation sources must be inside the current project directory. The checker copies the project into a temporary directory, verifies each candidate against an unchanged copy, and runs each test/mutant trial in a fresh copy and process. Each mutant/test experiment repeats in a fresh copy at least twice (`--mutation-repeats`, default 2); differing repeated outcomes are inconclusive. `--mutation-snapshot-mb` (default 256) rejects oversized project copies before copying. The original source is never patched. Caches, virtual environments, build output and common metadata directories are excluded from copies. Tests that depend on these excluded files, external editable installations, or a different working directory may have inconclusive baselines. A temporary copy is not an OS security sandbox: tests retain their usual network and external-filesystem access.
 
 For each mutant and test, JSON distinguishes `killed`, `survived`, `not_reached`, timeouts and errors. Only a failed test call that reached the mutation counts as a kill; collection/setup/teardown failures and timeouts do not. Per-pair comparisons identify distinguishing mutants. `same_on_sampled_mutants` means every sampled mutant was reached and produced the same conclusive outcome for both tests; it never establishes equivalence. Partial samples remain inconclusive.
 
@@ -75,7 +75,7 @@ Checks are skipped if the initial pytest run fails. Finding instability or diffe
 
 ## Collection and performance
 
-The default `--collector contexts` keeps one coverage collector running and assigns explicit test node IDs as contexts. Both collector modes select coverage.py's tracing core: Python 3.14's default `sysmon` core does not support explicit context switching or the same complete arc observations. Setup, call and teardown belong to that test's context; inter-test activity uses an unqueried empty context. The previous `--collector restart` mode remains available for comparison.
+The default `--collector contexts` keeps one coverage collector running and assigns explicit test node IDs as contexts. Both collector modes select coverage.py's tracing core: Python 3.14's default `sysmon` core does not support explicit context switching or the same complete arc observations. Setup, call and teardown have separate contexts attached to that test; inter-test activity uses an unqueried empty context. The previous `--collector restart` mode remains available for comparison.
 
 ```sh
 pytest_deduplicate --source src --benchmark-collectors 3 --json benchmark.json
@@ -85,20 +85,95 @@ The benchmark reruns the selected suite in fresh processes with instrumentation 
 
 The context default was selected after a bounded synthetic benchmark and regression checks for phase attribution. See [the recorded benchmark and reproduction command](docs/collector-benchmark.md). Measure your own suite before assuming the same improvement.
 
+## Conclusions and phase evidence
+
+Each finding has one `assessment.status`: `unchecked`, `stable_coverage_only`,
+`consistent_in_checked_sample`, `different_fault_detection`, `unstable`, or
+`incomplete`. Full group membership matters: checking two tests in a larger
+group does not validate the whole group. Pairwise mutant differences do not
+prove anything about the fault-detection union of a combined finding. No status
+authorizes automatic removal.
+
+`tests[].phase_file_arcs` separates setup/call/teardown evidence. By default,
+comparisons use all observed protocol activity. Use `--coverage-phase call` to
+compare test calls without fixture setup/teardown. Shared fixtures remain
+attributed only when executed; phases are not reconstructed for other tests.
+
+## Import pytest-cov and xdist results
+
+Install pytest-cov and, for parallel runs, pytest-xdist. Record outcomes during
+the **same fresh, non-append run**, then import without rerunning pytest:
+
+```sh
+pytest -p pytest_deduplicate_import --cov=src --cov-branch --cov-context=test \
+  --deduplicate-outcomes outcomes.json -n 2 tests/
+pytest_deduplicate --source src --import-coverage .coverage --outcomes outcomes.json \
+  --coverage-phase call --json overlap.json --html overlap.html
+```
+
+`--deduplicate-coverage-file PATH` selects a nondefault final combined data file.
+The companion binds outcomes to its SHA-256, collected inventory, source/test
+hashes and project root. Import rejects mismatches, missing phases, worker
+failures, retries, stale contexts and line-only data. Import from the recorded
+root before editing source. Missing explicit phase contexts are `null`, not
+empty coverage: pytest-cov versions may attribute only calls. Such imports
+remain incomplete for `--coverage-phase all`. Empty/unattributed contexts are
+not assigned to tests. Import cannot run optional live checks.
+
+## Compare and review reports
+
+```sh
+pytest_deduplicate --source src --json current.json --baseline previous.json \
+  --html overlap.html --review-template review-draft.json
+```
+
+Finding IDs depend on kind and test IDs, not timings or commit paths. Baseline
+comparison lists new, changed, unchanged and resolved findings. Resolution
+requires successful runs with identical source scope and test inventory;
+otherwise absent findings are `unobserved`. This supports reports from different
+commits without claiming deselected tests have been fixed.
+
+To record a reviewed finding, copy its template entry into a review document,
+fill `reason` and `reviewed_at`, and pass `--suppressions reviews.json`. Empty
+reasons are rejected. Source/test, arc, scope or assessment changes invalidate
+the recorded evidence hash and mark it `needs_revalidation`. Reviewed entries
+remain in JSON; the HTML viewer can hide only unchanged reviewed entries.
+
+The standalone HTML report needs no server or external assets. Filter by module
+or test, assessment and total observed duration; expand exact file/arc and
+phase evidence. Source excerpts are embedded only when current bytes match the
+report hash, capped at 500 lines per file. Displayed durations include coverage overhead and are not
+predicted time savings.
+
+## Measured validation
+
+[Real-project evaluation](docs/real-project-evaluation.md) covers bounded suites
+in vextest (47 tests) and masm2c (20 tests), including manual counterexamples
+and a random-order parser-cache effect. It does not establish whole-project
+precision or semantic recall. Hypothesis tests compare set operations and
+containment/combined detection with independent oracles and execute generated
+programs with known findings.
+
+The exact inverted arc index interns file/arc identities and filters impossible
+comparisons. [Recorded analysis benchmark](docs/overlap-benchmark.json) and
+`python tools/benchmark_overlap.py` compare it with the quadratic containment
+oracle. Dense findings can still require quadratic output; no findings are
+silently dropped.
+
 ## Remaining limits
 
 - Coverage records Python line transitions, not values, assertions, execution counts, complete paths or native-code behavior.
 - Collected Python test bodies (including nested code) are excluded, but helpers/fixtures in those files remain measurable. Custom collectors or decorators without inspectable wrapped functions may retain test scaffolding.
 - Only fully passed, non-xfail tests with nonempty observations become candidates. JSON still records other test outcomes and available coverage.
 - Shared fixtures and caches can make observations order dependent. A module/session fixture is attributed only to the test during which pytest actually executes its setup or teardown.
-- One serial pytest process is supported. Distributed execution and simultaneous `--cov` collection are rejected; subprocess coverage is not aggregated. Other externally active collectors are not validated.
+- Live collection requires one serial pytest process and rejects simultaneous `--cov`. Existing pytest-cov/xdist data can be imported with the companion manifest below. Arbitrary subprocess coverage and externally active collectors are not validated.
 - Repeated execution of the same node ID within a run (for example rerun plugins) is not supported. Do not combine this tool with retries.
 - Test durations include instrumentation overhead. Comparison analysis can become expensive for many distinct coverage sets; optional checks are bounded separately.
 
 ## Development and release checks
 
 ```sh
-python -m pip install -r requirements.txt build wheel setuptools
+python -m pip install -r requirements.txt build wheel setuptools "hypothesis>=6.100" "pytest-cov>=5" "pytest-xdist>=3.6"
 python -m pytest -q
 python tools/check_distribution.py
 ```

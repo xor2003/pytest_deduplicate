@@ -80,9 +80,8 @@ def test_stability_limit_and_stable_pair(tmp_path):
                        "--max-candidates", "1", "--json", "report.json")
     assert result.returncode == 0, result.stdout + result.stderr
     stability = load_report(tmp_path)["stability"]
-    assert len(stability["tests"]) == 1
-    assert len(stability["unchecked"]) == 1
-    assert next(iter(stability["tests"].values()))["status"] == "stable_in_checked_runs"
+    assert stability["tests"] == {}
+    assert len(stability["unchecked"]) == 2
 
 
 def test_mutants_distinguish_equal_coverage_and_preserve_source(tmp_path):
@@ -146,7 +145,7 @@ def test_contexts_do_not_leak_failed_test_coverage(tmp_path):
 
 def test_real_optional_check_timeout_is_inconclusive(tmp_path):
     result = run_suite(tmp_path, PAIR, "--source", "product.py", "--stability-runs", "1",
-                       "--max-candidates", "1", "--check-timeout", "0.001", "--json", "report.json")
+                       "--max-candidates", "2", "--check-timeout", "0.001", "--json", "report.json")
     assert result.returncode == 0, result.stdout + result.stderr
     result = next(iter(load_report(tmp_path)["stability"]["tests"].values()))
     assert result["status"] == "inconclusive"
@@ -174,7 +173,7 @@ def test_unknown_optional_child_failure_is_reported(tmp_path):
     files = dict(PAIR)
     files["conftest.py"] = "from pathlib import Path\ndef pytest_sessionfinish(session):\n    Path('product.py').unlink(missing_ok=True)\n"
     result = run_suite(tmp_path, files, "--source", "product.py", "--stability-runs", "1",
-                       "--max-candidates", "1", "--json", "report.json")
+                       "--max-candidates", "2", "--json", "report.json")
     assert result.returncode == 0, result.stdout + result.stderr
     status = next(iter(load_report(tmp_path)["stability"]["tests"].values()))["status"]
     assert status == "inconclusive"

@@ -22,15 +22,16 @@ def fingerprint(test):
     """Ignore timings, retaining outcomes and exact measured file/arc identities."""
     return {
         "eligible": test["eligible"], "file_arcs": test["file_arcs"],
+        "phase_file_arcs": test.get('phase_file_arcs'),
         "phases": {name: (phase["outcome"], phase["xfail"])
                    for name, phase in test["phases"].items()},
     }
 
 
 def candidate_ids(report, limit):
-    wanted = {nodeid for f in report["findings"] for nodeid in f["tests"] + f["other_tests"]}
-    ordered = [test["nodeid"] for test in report["tests"] if test["nodeid"] in wanted]
-    return ordered[:limit], ordered[limit:]
+    from pytest_deduplicate_review import select_candidates
+    selection = select_candidates(report, limit)
+    return selection['selected'], selection['unchecked']
 
 
 def rebase(value, original, destination):
@@ -54,6 +55,7 @@ def run_child(root, options, pytest_args, selected=None, order=None, collector=N
             "pytest_args": [rebase(arg, original, root) for arg in pytest_args],
             "source": [rebase(str(Path(p).resolve()), original, root) for p in options.source],
             "omit": [rebase(p, original, root) for p in options.omit],
+            "coverage_phase": options.coverage_phase,
             "collector": collector or options.collector, "selected": selected,
             "order": order, "output": str(output),
         }))
@@ -141,6 +143,7 @@ def mutations_for_source(source):
              ast.Eq: ast.NotEq, ast.NotEq: ast.Eq}
     lines = source.splitlines(keepends=True)
     seen = set()
+    functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
     for node in sorted(ast.walk(tree), key=lambda n: (getattr(n, "lineno", 0), getattr(n, "col_offset", 0))):
         if not hasattr(node, "end_lineno") or node.end_lineno != node.lineno:
             continue
@@ -168,7 +171,12 @@ def mutations_for_source(source):
             compile(text, "<mutant>", "exec")
         except SyntaxError:
             continue
-        yield {"line": node.lineno, "column": node.col_offset + 1,
+        enclosing = [n for n in functions if n.lineno <= node.lineno <= n.end_lineno]
+        owner = min(enclosing, key=lambda n: n.end_lineno - n.lineno) if enclosing else None
+        yield {"function": f"{owner.name}:{owner.lineno}" if owner else '<module>',
+               "operator": type(node.op).__name__ if isinstance(node, ast.BinOp) else
+                           type(node.ops[0]).__name__ if isinstance(node, ast.Compare) else type(node.value).__name__,
+               "line": node.lineno, "column": node.col_offset + 1,
                "before": before, "after": replacement, "source": text}
 
 
@@ -211,7 +219,9 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
             path = (root / filename).resolve()
             if path.is_relative_to(root) and any(path == Path(s).resolve() or Path(s).resolve() in path.parents for s in options.source):
                 measured.setdefault(filename, set()).update(line for arc in arcs for line in arc if line > 0)
-    edits = []
+    buckets = {}
+    seen_per_bucket = {}
+    rng = random.Random(options.seed)
     for filename, lines in sorted(measured.items()):
         path = root / filename
         if path.suffix != ".py":
@@ -221,13 +231,43 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
                 source, encoding = stream.read(), stream.encoding
             for mutant in mutations_for_source(source):
                 if mutant["line"] in lines:
-                    edits.append(dict(mutant, file=filename, encoding=encoding))
-                    if len(edits) == options.mutations:
-                        break
+                    key = (filename, mutant['function'], mutant['operator'])
+                    seen_per_bucket[key] = seen_per_bucket.get(key, 0) + 1
+                    bucket = buckets.setdefault(key, [])
+                    edit = dict(mutant, file=filename, encoding=encoding)
+                    if len(bucket) < options.mutations:
+                        bucket.append(edit)
+                    else:
+                        slot = rng.randrange(seen_per_bucket[key])
+                        if slot < options.mutations:
+                            bucket[slot] = edit
         except (OSError, SyntaxError, UnicodeError) as exc:
             result.setdefault("skipped_files", []).append({"file": filename, "reason": str(exc)})
-        if len(edits) == options.mutations:
-            break
+    edits = []
+    schedules = {}
+    for key in sorted(buckets):
+        schedules.setdefault(key[0], []).append(key)
+    filenames = sorted(schedules)
+    rng.shuffle(filenames)
+    for keys in schedules.values():
+        rng.shuffle(keys)
+    for bucket in buckets.values():
+        rng.shuffle(bucket)
+    while filenames and len(edits) < options.mutations:
+        for filename in list(filenames):
+            keys = schedules[filename]
+            key = keys.pop(0)
+            edits.append(buckets[key].pop())
+            if buckets[key]:
+                keys.append(key)
+            if not keys:
+                filenames.remove(filename)
+            if len(edits) == options.mutations:
+                break
+    result['sampling'] = {'strategy': 'seeded round-robin file/function/operator buckets',
+                          'seed': options.seed, 'available_buckets': len(buckets),
+                          'supported_edits': sum(seen_per_bucket.values())}
+    result['confirmation_runs'] = options.mutation_repeats
     if not candidates or not edits:
         result["status"] = "no_candidates" if not candidates else "no_supported_mutants"
         return result
@@ -235,6 +275,18 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
         temp = Path(temp).resolve()
         snapshot = temp / "snapshot"
         ignored = shutil.ignore_patterns(".git", ".venv", "venv", "__pycache__", "*.pyc", ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist", ".tox", ".nox", "node_modules", ".idea")
+        total = 0
+        for directory, dirs, files in os.walk(root, followlinks=False):
+            excluded = ignored(directory, dirs + files)
+            dirs[:] = [d for d in dirs if d not in excluded]
+            for name in files:
+                path = Path(directory) / name
+                if name not in excluded and not path.is_symlink():
+                    total += path.stat().st_size
+                    if total > options.mutation_snapshot_mb * 1024 * 1024:
+                        result.update(status='snapshot_limit_exceeded', snapshot_bytes_at_least=total)
+                        return result
+        result['snapshot_bytes'] = total
         shutil.copytree(root, snapshot, symlinks=True, ignore=ignored)
         valid = []
         # Every trial receives a fresh copy: test-generated files cannot leak
@@ -247,7 +299,7 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
                 tests = run.get("report", {}).get("tests", [])
                 healthy = (run["status"] == "complete" and run["returncode"] == 0
                            and len(tests) == 1 and tests[0]["eligible"]
-                           and tests[0]["file_arcs"] == observations[nodeid]["file_arcs"])
+                           and fingerprint(tests[0]) == fingerprint(observations[nodeid]))
                 result["baseline"][nodeid] = "passed" if healthy else "inconclusive"
                 if not healthy:
                     result.setdefault("baseline_diagnostics", {})[nodeid] = {
@@ -263,20 +315,24 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
             mutant = {key: value for key, value in edit.items() if key not in ("source", "encoding")}
             mutant.update(id=f"M{number:04d}", outcomes={})
             for nodeid in valid:
-                trial = Path(temp) / "trial"
-                shutil.copytree(snapshot, trial, symlinks=True)
-                try:
-                    target = trial / edit["file"]
-                    if not target.resolve().is_relative_to(trial):
-                        mutant["outcomes"][nodeid] = "external_symlink"
-                        continue
-                    target.write_text(edit["source"], encoding=edit["encoding"])
-                    run = run_child(trial, options, pytest_args, [nodeid], [nodeid])
-                    mutant["outcomes"][nodeid] = mutation_outcome(run, nodeid, edit["file"], edit["line"])
-                    if run["status"] != "complete":
-                        mutant.setdefault("diagnostics", {})[nodeid] = compact_run(run)
-                finally:
-                    shutil.rmtree(trial)
+                outcomes = []
+                for repeat in range(options.mutation_repeats):
+                    trial = Path(temp) / "trial"
+                    shutil.copytree(snapshot, trial, symlinks=True)
+                    try:
+                        target = trial / edit["file"]
+                        if not target.resolve().is_relative_to(trial):
+                            outcomes.append('external_symlink')
+                            break
+                        target.write_text(edit["source"], encoding=edit["encoding"])
+                        run = run_child(trial, options, pytest_args, [nodeid], [nodeid])
+                        outcomes.append(mutation_outcome(run, nodeid, edit["file"], edit["line"]))
+                        if run["status"] != "complete":
+                            mutant.setdefault("diagnostics", {})[nodeid] = compact_run(run)
+                    finally:
+                        shutil.rmtree(trial)
+                mutant.setdefault('trials', {})[nodeid] = outcomes
+                mutant['outcomes'][nodeid] = outcomes[0] if len(set(outcomes)) == 1 else 'inconclusive'
             result["mutants"].append(mutant)
     for index, left in enumerate(candidates):
         for right in candidates[index + 1:]:
@@ -324,7 +380,9 @@ def benchmark_collectors(options, pytest_args):
 
 
 def run_checks(report, options, pytest_args):
-    candidates, unchecked = candidate_ids(report, options.max_candidates)
+    from pytest_deduplicate_review import select_candidates
+    report["selection"] = select_candidates(report, options.max_candidates)
+    candidates, unchecked = report["selection"]["selected"], report["selection"]["unchecked"]
     if report["pytest_exit_code"] != 0 or report["errors"]:
         report["checks"] = {"status": "not_run", "reason": "baseline run was unsuccessful"}
         return

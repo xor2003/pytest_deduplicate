@@ -1,0 +1,199 @@
+{
+  "masm2c": {
+    "runs": {
+      "contexts": {
+        "tests": 20,
+        "exit_code": 0,
+        "elapsed": 24.063167424872518,
+        "errors": [],
+        "empty_coverage_tests": 1,
+        "findings": {
+          "identical": 3,
+          "contained": 6
+        }
+      },
+      "restart": {
+        "tests": 20,
+        "exit_code": 0,
+        "elapsed": 2.2748554428108037,
+        "errors": [],
+        "empty_coverage_tests": 1,
+        "findings": {
+          "identical": 3,
+          "contained": 6
+        }
+      }
+    },
+    "collector_parity": false,
+    "snapshot_after_runs": {
+      "head": "8c04991c0fce31af32c64a383c34f38053741f14",
+      "tracked_source_sha256": "8ecb94dfc9e83c9c2165deed8a0c41af89405dde7048349c9c675feaf4c9bffa",
+      "dirty": true
+    },
+    "fixed_order_repeat": {
+      "runs": {
+        "contexts": {
+          "tests": 20,
+          "exit_code": 0,
+          "elapsed": 2.0421594767831266,
+          "errors": [],
+          "empty_coverage_tests": 1,
+          "findings": {
+            "identical": 3,
+            "contained": 6
+          }
+        },
+        "restart": {
+          "tests": 20,
+          "exit_code": 0,
+          "elapsed": 2.269249620847404,
+          "errors": [],
+          "empty_coverage_tests": 1,
+          "findings": {
+            "identical": 3,
+            "contained": 6
+          }
+        }
+      },
+      "collector_parity": true
+    },
+    "updated_collector_validation": {
+      "runs": {
+        "contexts": {
+          "tests": 20,
+          "exit_code": 0,
+          "elapsed": 7.704772528726608,
+          "errors": [],
+          "empty_coverage_tests": 1,
+          "findings": {
+            "identical": 3,
+            "contained": 6
+          }
+        },
+        "restart": {
+          "tests": 20,
+          "exit_code": 0,
+          "elapsed": 7.49518068227917,
+          "errors": [],
+          "empty_coverage_tests": 1,
+          "findings": {
+            "identical": 3,
+            "contained": 6
+          }
+        }
+      },
+      "collector_parity": true,
+      "before": {
+        "head": "8c04991c0fce31af32c64a383c34f38053741f14",
+        "tracked_source_sha256": "8ecb94dfc9e83c9c2165deed8a0c41af89405dde7048349c9c675feaf4c9bffa",
+        "dirty": true
+      },
+      "after": {
+        "head": "8c04991c0fce31af32c64a383c34f38053741f14",
+        "tracked_source_sha256": "8ecb94dfc9e83c9c2165deed8a0c41af89405dde7048349c9c675feaf4c9bffa",
+        "dirty": true
+      },
+      "wall_seconds": {
+        "contexts": 8.539806163869798,
+        "restart": 8.352312608156353
+      },
+      "tracked_snapshot_unchanged": true
+    },
+    "stability_sample": {
+      "budget": 2,
+      "runs_per_scenario": 1,
+      "tests": {
+        "tests/test_cli_args.py::CliArgsTest::test_collect_shared_equates_scans_simple_numeric_assignments": "stable_in_checked_runs",
+        "tests/test_cli_args.py::CliArgsTest::test_collect_shared_equates_uses_last_numeric_assignment": "stable_in_checked_runs"
+      },
+      "unchecked_count": 11
+    }
+  },
+  "vextest": {
+    "runs": {
+      "contexts": {
+        "tests": 47,
+        "exit_code": 0,
+        "elapsed": 14.662755842786282,
+        "errors": [],
+        "empty_coverage_tests": 7,
+        "findings": {
+          "identical": 10,
+          "contained": 12,
+          "combined": 1
+        }
+      },
+      "restart": {
+        "tests": 47,
+        "exit_code": 0,
+        "elapsed": 7.8928769659250975,
+        "errors": [],
+        "empty_coverage_tests": 7,
+        "findings": {
+          "identical": 10,
+          "contained": 12,
+          "combined": 1
+        }
+      }
+    },
+    "collector_parity": true,
+    "snapshot_after_runs": {
+      "head": "27ee6a67c6a9d3d35acc38cf35fad27ae2d3f6cf",
+      "tracked_source_sha256": "142f39380ccacbeb3e383b42869f37a7b075cbc52b006418c770c900bb9978ca",
+      "dirty": true
+    },
+    "updated_collector_validation": {
+      "runs": {
+        "contexts": {
+          "tests": 47,
+          "exit_code": 0,
+          "elapsed": 69.63893955107778,
+          "errors": [],
+          "empty_coverage_tests": 7,
+          "findings": {
+            "identical": 10,
+            "contained": 12,
+            "combined": 1
+          }
+        },
+        "restart": {
+          "tests": 47,
+          "exit_code": 0,
+          "elapsed": 19.662223850842565,
+          "errors": [],
+          "empty_coverage_tests": 7,
+          "findings": {
+            "identical": 10,
+            "contained": 12,
+            "combined": 1
+          }
+        }
+      },
+      "collector_parity": true,
+      "before": {
+        "head": "27ee6a67c6a9d3d35acc38cf35fad27ae2d3f6cf",
+        "tracked_source_sha256": "200691516864317f9ddaa505d908fb2afa8d7b58d1fe940f914ef9c4a8844014",
+        "dirty": true
+      },
+      "after": {
+        "head": "27ee6a67c6a9d3d35acc38cf35fad27ae2d3f6cf",
+        "tracked_source_sha256": "200691516864317f9ddaa505d908fb2afa8d7b58d1fe940f914ef9c4a8844014",
+        "dirty": true
+      },
+      "wall_seconds": {
+        "contexts": 71.9993545236066,
+        "restart": 21.165305180940777
+      },
+      "tracked_snapshot_unchanged": true
+    },
+    "stability_sample": {
+      "budget": 2,
+      "runs_per_scenario": 1,
+      "tests": {
+        "angr_platforms/tests/test_x86_16_stack_lowering.py::TestStackStorageFactsForSegmentedAddress::test_ss_negative_offset_produces_stack_facts": "stable_in_checked_runs",
+        "angr_platforms/tests/test_x86_16_stack_lowering.py::TestStackStorageFactsForSegmentedAddress::test_ss_positive_offset_produces_stack_facts": "stable_in_checked_runs"
+      },
+      "unchecked_count": 26
+    }
+  }
+}

@@ -22,7 +22,7 @@ def run_suite(tmp_path, files, *args):
     env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
     env.pop("PYTEST_ADDOPTS", None)
     return subprocess.run(
-        [sys.executable, str(SCRIPT), "-q", "-p", "no:cacheprovider", *args],
+        [sys.executable, str(SCRIPT), *([] if '--import-coverage' in args else ['-q', '-p', 'no:cacheprovider']), *args],
         cwd=tmp_path, env=env, text=True, capture_output=True, timeout=30,
     )
 
