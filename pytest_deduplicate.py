@@ -1,18 +1,15 @@
 #!/usr/bin/env python
+import dis
+import inspect
 import logging
 import os
 import sys
-from copy import copy
 from dataclasses import dataclass
+from types import CodeType
 from typing import Optional
 
 import pytest
-from _pytest.unittest import TestCaseFunction
 from coverage import Coverage
-from coverage.data import add_data_to_hash
-from coverage.misc import Hasher
-
-# from line_profiler_pycharm import profile
 
 Arc = tuple[int, int]
 Location = tuple[str, Optional[int], str]
@@ -51,7 +48,7 @@ class TestCoverage:
     True
     """
 
-    tests_locations: set[Location]
+    tests_locations: list[Location]
     file_arcs: dict[str, set[Arc]]
 
     def __len__(self):
@@ -146,159 +143,141 @@ class TestCoverage:
         return TestCoverage([], result_dict)
 
 
-hash_tests: dict[str, TestCoverage] = {}
+def coverage_signature(file_arcs):
+    """An exact, order-independent key including file identity and executed arcs."""
+    return tuple(sorted((filename, tuple(sorted(arcs)))
+                        for filename, arcs in file_arcs.items() if arcs))
 
 
 class FindDuplicateCoverage:
     def __init__(self) -> None:
-        self.collected: list[str] = []  # list to store collected test names
-        self.location: Optional[Location] = None  # the name of the current test
-        self.coverage = None  # Coverage object to measure code coverage
-        self.skipped = False  # flag to track if the test is skipped
-        self.coverage = Coverage(branch=True, data_file=None,
-                                 omit=os.path.basename(__file__))  # initialize the Coverage object with branch coverage
-        # self.coverage = copy(self._coverage)
-
-    # @profile
-    def pytest_collection_modifyitems(self, items: list) -> None:
-        # append test name to the collected list
-        self.collected = [item.name for item in items if isinstance(item, TestCaseFunction)]
-
-    # @profile
-    def pytest_runtest_logstart(self, nodeid: str, location: Location) -> None:
-        # logging.debug("Start test %s", nodeid)
-        self.location = location  # set the name of the current test
-
-    # @profile
-    def start_collection(self) -> None:
-        try:
-            # logging.debug("Coverage created")
-            assert self.coverage
-            self.coverage.erase()  # start the coverage measurement
-            self.coverage.start()  # start the coverage measurement
-        except Exception:
-            logging.exception("Exception while starting coverage")
-            self.coverage = None
-
-    # @profile
-    def pytest_report_teststatus(self, report) -> None:
-        # logging.debug("pytest_report_teststatus %s", report)
-        if report.when == "setup":
-            self.start_collection()
-        elif report.when == "call":
-            self.skipped = report.outcome == "skipped"  # set skipped flag based on test outcome
-            logging.debug("Skipped %s", self.skipped)
-        elif report.when == "teardown":
-            self.stop_collection()
-
-    # @profile
-    def pytest_runtest_logfinish(self, nodeid, location):
-        logging.debug("Stop test %s", nodeid)
-
-    # @profile
-    def stop_collection(self):
-        if self.coverage:
-            try:
-                self.coverage.stop()
-                logging.debug("Coverage stopped")
-            except Exception:
-                logging.exception("Exception while stopping coverage")
-        if self.coverage and not self.skipped:
-            try:
-                data = self.coverage.get_data()
-                hasher = Hasher()  # Hasher object to hash the coverage data
-                arcs_list = {}
-                for file_name in data.measured_files():
-                    if os.path.basename(file_name).startswith("test_"):
-                        continue
-                    logging.debug(file_name)
-                    add_data_to_hash(data, file_name, hasher)
-                    if arcs := set(data.arcs(file_name)):
-                        arcs_list[file_name] = arcs
-                if not arcs_list:
-                    logging.warning("Empty arcs for %s %s", self.location, arcs_list)
-                    return
-                text_hash = hasher.hexdigest()
-
-                logging.debug(text_hash)
-
-                if text_hash in hash_tests:
-                    hash_tests[text_hash].tests_locations.append(self.location)
-                else:
-                    hash_tests[text_hash] = TestCoverage(tests_locations=[self.location], file_arcs=arcs_list)
-                logging.debug("Coverage collected")
-
-            except Exception:
-                logging.exception("Exception while processing coverage")
+        self.groups = {}
+        self.test_lines = {}
+        self.reports = []
+        self.errors = []
         self.location = None
-        self.skipped = False
+        self.coverage = Coverage(branch=True, data_file=None,
+                                 omit=os.path.abspath(__file__))
+
+    def pytest_collection_modifyitems(self, items):
+        # Exclude collected test bodies, retaining helpers in the same module.
+        def add_code(code):
+            filename = os.path.abspath(code.co_filename)
+            lines = self.test_lines.setdefault(filename, set())
+            lines.update(line for _, line in dis.findlinestarts(code))
+            for constant in code.co_consts:
+                if isinstance(constant, CodeType):
+                    add_code(constant)
+
+        for item in items:
+            obj = getattr(item, "obj", None)
+            if obj is not None:
+                obj = inspect.unwrap(obj)
+                code = getattr(obj, "__code__", None)
+                if code is not None:
+                    add_code(code)
+
+    @pytest.hookimpl(hookwrapper=True)
+    def pytest_runtest_protocol(self, item, nextitem):
+        file, line, name = item.location
+        self.location = (file, line, item.nodeid.split("::", 1)[-1])
+        self.reports = []
+        started = False
+        try:
+            self.coverage.erase()
+            self.coverage.start()
+            started = True
+        except Exception as exc:
+            self.errors.append(str(exc))
+            logging.exception("Unable to start coverage")
+        try:
+            yield
+        finally:
+            if started:
+                try:
+                    self.coverage.stop()
+                    # Failed, skipped, xfailed and incomplete runs are not candidates.
+                    if ({r.when for r in self.reports} == {"setup", "call", "teardown"}
+                            and all(r.passed and not hasattr(r, "wasxfail")
+                                    for r in self.reports)):
+                        self.collect_coverage()
+                except Exception as exc:
+                    self.errors.append(str(exc))
+                    logging.exception("Unable to process coverage")
+            self.location = None
+
+    @pytest.hookimpl(hookwrapper=True)
+    def pytest_runtest_makereport(self, item, call):
+        outcome = yield
+        self.reports.append(outcome.get_result())
+
+    def collect_coverage(self):
+        data = self.coverage.get_data()
+        file_arcs = {}
+        for filename in sorted(data.measured_files()):
+            excluded = self.test_lines.get(os.path.abspath(filename), set())
+            arcs = {arc for arc in data.arcs(filename) or []
+                    if not any(abs(line) in excluded for line in arc)}
+            if arcs:
+                file_arcs[filename] = arcs
+        if not file_arcs:
+            logging.warning("No comparable coverage for %s", self.location)
+            return
+        signature = coverage_signature(file_arcs)
+        if signature in self.groups:
+            self.groups[signature].tests_locations.append(self.location)
+        else:
+            self.groups[signature] = TestCoverage([self.location], file_arcs)
 
 
 def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[TestCoverage, list[TestCoverage]]]:
     """Returns a list of sets that are fully overlapped by multiple sets."""
-    sorted_sets = sorted(list_of_sets, key=len, reverse=True)
-
+    sorted_sets = sorted((cov for cov in list_of_sets if cov), key=len, reverse=True)
     fully_overlapped_sets = []
-    while (big_set := sorted_sets.pop(0)) and sorted_sets:
-        # Check if this test can be replaced by others
-        if not big_set.issubset(TestCoverage.union(*sorted_sets)):
-            continue
-        # prepare list of tests related to this and sort it by descending related arcs size
-        related_sets = sorted([other_set for other_set in sorted_sets if other_set & big_set],
-                              key=len,
-                              reverse=True)
-
-        big_set_ = copy(big_set)
-
-        small_sets: list[TestCoverage] = []
-        for related_set in related_sets:
-            if not big_set_:
+    for index, big_set in enumerate(sorted_sets):
+        # Only genuinely smaller observations belong in this report.
+        candidates = [cov for cov in sorted_sets[index + 1:] if len(cov) < len(big_set)]
+        remaining = big_set
+        small_sets = []
+        for candidate in candidates:
+            if not remaining:
                 break
-            assert big_set_ & related_set
-            if big_set_ & related_set:
-                old = len(big_set_)
-                big_set_ -= related_set
-                """print("")
-                print(big_set_, len(big_set_))
-                print(related_set)
-                print(big_set_ & related_set)
-                print(bool(big_set_ & related_set))"""
-                assert old != len(big_set_)
-                small_sets.append(related_set)
-
-        if not big_set_:
+            if remaining & candidate:
+                remaining = remaining - candidate
+                small_sets.append(candidate)
+        if not remaining:
             fully_overlapped_sets.append((big_set, small_sets))
     return fully_overlapped_sets
 
 
-# @profile
-def main():
+def main(args=None):
     my_plugin = FindDuplicateCoverage()
-    pytest.main(sys.argv[1:], plugins=[my_plugin])
+    exit_code = pytest.main(sys.argv[1:] if args is None else args, plugins=[my_plugin])
+    hash_tests = my_plugin.groups
+    print("Coverage overlap candidates only; matching coverage does not prove equivalent assertions.")
 
-    # print("Hash size: ", len(hash_tests))
     for tests in hash_tests.values():
         if len(tests.tests_locations) == 1:
             continue
-        print("1. Duplicate tests detected with identical coverage:")
+        print("1. Tests with identical observed coverage:")
         for item in sorted(tests.tests_locations):
             file, line, name = item
             print(
-                f"{file}:{line}:1: W001 tests with same coverage: {name} consider keeping only one (duplicate-test)",
+                f"{file}:{(line + 1) if line is not None else 1}:1: W001 tests with same coverage: {name} review assertions and inputs (identical-coverage)",
             )
         print("\n")
 
     for big_test, small_tests in find_fully_overlapped_sets(
             [TestCoverage(cov.tests_locations, cov.file_arcs) for cov in hash_tests.values()]):
-        print('\n2. "God test" detected with broad coverage:')
+        print('\n2. Coverage collectively contained in smaller observations:')
         bigger_filename, bigger_linenum, bigger_test_name = big_test.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: W002 test {bigger_test_name} can be replaced by smaller tests below (bigger-coverage)",
+            f"{bigger_filename}:{(bigger_linenum + 1) if bigger_linenum is not None else 1}:1: W002 test {bigger_test_name} has observed coverage contained in the union below (combined-coverage)",
         )
         for item in small_tests:
             smaller_filename, smaller_linenum, smaller_name = item.tests_locations[0]
             print(
-                f"{smaller_filename}:{smaller_linenum}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
+                f"{smaller_filename}:{(smaller_linenum + 1) if smaller_linenum is not None else 1}:1: I002 test {smaller_name} covers part of {bigger_test_name} test (smaller-test)",
             )
         print("\n")
 
@@ -313,20 +292,23 @@ def main():
         if not items:
             continue
 
-        print("\n3. Superseeded tests:")
+        print("\n3. Tests with contained observed coverage:")
         bigger_filename, bigger_linenum, bigger_test_name = tests2.tests_locations[0]
         print(
-            f"{bigger_filename}:{bigger_linenum}:1: I003 test {bigger_test_name} covers more code than test(s) below (bigger-coverage)",
+            f"{bigger_filename}:{(bigger_linenum + 1) if bigger_linenum is not None else 1}:1: I003 test {bigger_test_name} has observed coverage containing test(s) below (bigger-coverage)",
         )
         for item in sorted(items):
             smaller_filename, smaller_linenum, smaller_name = item
             print(
-                f"{smaller_filename}:{smaller_linenum}:1: W003 test {smaller_name} covers less code than {bigger_test_name} test. Consider remove it (smaller-coverage)",
+                f"{smaller_filename}:{(smaller_linenum + 1) if smaller_linenum is not None else 1}:1: W003 test {smaller_name} has observed coverage contained in {bigger_test_name}; review assertions and inputs (contained-coverage)",
             )
         print("\n")
 
+    if my_plugin.errors:
+        print("Coverage analysis incomplete: " + "; ".join(my_plugin.errors), file=sys.stderr)
+        return int(exit_code) or 1
+    return int(exit_code)
+
 
 if __name__ == "__main__":
-    #import doctest
-    #doctest.testmod(verbose=True)
-    main()
+    sys.exit(main())

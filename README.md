@@ -1,90 +1,74 @@
-# `pytest_deduplicate`
+# pytest_deduplicate
 
-The `pytest_deduplicate` tool assists in analyzing your test suite to identify potential issues related to duplicate and overlapping tests. By utilizing code coverage information, it pinpoints areas for improvement, leading to a more efficient and focused set of tests.
+Find tests with identical or overlapping **observed branch coverage** to help review a test suite.
 
-### Benefits
-* **Reduced Test Suite Size:** Eliminating redundant tests results in a more efficient test suite, saving execution time and resources.
-* **Improved Test Focus:** Breaking down large tests into smaller, more specific ones enhances clarity and maintainability.
-* **Enhanced Code Coverage Analysis:** Identifying overlaps and gaps in coverage helps you focus your testing efforts more effectively.
+Coverage overlap is a review signal. It does **not** prove that tests have equivalent assertions, inputs, side effects, or fault-detection ability. Do not delete tests solely because this tool reports a match.
 
-### Requirements
-* Python 3.x
-* pytest or unittest
-* coverage
+## Installation and usage
 
-### Installation
-1. Ensure you have the required libraries installed:
-    ```sh
-    pip install -r requirements.txt
-    ```
+Install the dependencies:
 
-### Usage
-1. Run your tests with pytest and include the script as a plugin:
-    ```sh
-    cd <working_directory>
-    /path/to/this/tool/pytest_deduplicate.py [pytest_parameters]
-    ```
-2. Review the output, which will include three sections of information:
+```sh
+pip install -r requirements.txt
+```
 
-    | **Case** | **Description** | **Actionable Insights** | **Example** |
-    |-----------------------------------|---------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-    | **Case 1: Duplicates**            | Tests with identical code coverage, indicating redundancy.                                                | Remove duplicate tests, keeping the most readable or representative one.    | `TestSimple.test_even0` and `TestSimple.test_even2` have identical coverage.                               |
-    | **Case 2: Broad Coverage ("God Tests")** | Tests that cover too much functionality, making them harder to maintain and understand.                   | Split into smaller, focused tests to improve clarity and maintainability.    | `TestSimple.test_evenodd` can be split into smaller tests like `test_even0` and `test_odd`.                |
-    | **Case 3: Superseded Tests**      | Tests whose coverage is entirely contained within another test, making them redundant.                     | Remove smaller tests if the larger test sufficiently covers the functionality. | `TestSimple.test_evenodd` supersedes `test_even0`, `test_even2`, and `test_odd`.                           |
+Run from the project whose tests you want to inspect:
 
-### Interpreting the Results
-* **Duplicates:** Consider removing duplicate tests, keeping the one that is most readable or representative.
-* **God Tests:** Evaluate splitting these tests into smaller units that focus on specific functionality. This can improve test clarity and maintainability.
-* **Superseded Tests:** Assess whether these tests are truly redundant and can be safely removed. Ensure that removing them doesn't leave any functionality untested.
+```sh
+python /path/to/pytest_deduplicate.py [pytest arguments]
+```
 
-**Note:** Be aware of potential false positives, especially in cases involving complex code structures like regular expressions, as the code coverage may appear identical.
+For example:
 
-### Additional Notes
-* Consider using code coverage visualization tools alongside this script for a more comprehensive understanding of your test coverage landscape.
+```sh
+python /path/to/pytest_deduplicate.py -q tests/
+```
 
-### Result Example
+The command preserves pytest’s exit status, including failures and no tests collected. An internal coverage collection error also produces a nonzero exit status.
+
+## Reports
+
+| Code | Meaning | How to use it |
+|---|---|---|
+| W001 | Tests have identical observed file-and-arc sets. | Compare assertions, inputs and requirements before deciding whether any test is redundant. |
+| W002 / I002 | A test’s observed coverage is contained in the union of smaller observations. | Review the listed combination. This is neither a minimal replacement set nor evidence of a poorly designed test. |
+| W003 / I003 | One test’s observed coverage is contained in another’s. | Review the different behaviors checked by each test. Containment alone does not establish redundancy. |
+
+Locations use one-based line numbers. Parameterized cases retain their case identifiers.
+
+For example, these tests exercise the same arcs:
+
 ```python
-def function(x):
-    if x % 2 == 0:
-        for i in range(1, 3):
-            print("even")
-        return True
-    else:
-        print("odd")
-        return False
+def double(x):
+    return x * 2
 
-def test_even0(self):
-    self.assertEqual(function(0), True)
 
-def test_even2(self):
-    self.assertEqual(function(2), True)
+def test_positive():
+    assert double(2) == 4
 
-def test_odd(self):
-    self.assertEqual(function(3), False)
 
-def test_evenodd(self):
-    self.assertEqual(function(2), True)
-    self.assertEqual(function(3), False)
+def test_negative():
+    assert double(-2) == -4
 ```
 
-# Output:
+Both are useful: changing the implementation to `abs(x) * 2` breaks only the negative-input test. W001 therefore identifies matching coverage, not interchangeable tests.
+
+## Measurement scope and limitations
+
+- Each observation includes setup, the test call and teardown. Only tests with successful setup, call and teardown enter the comparison; skipped, failed and expected-failure cases are excluded.
+- Collected Python test bodies are removed from the comparison, while helper functions and fixtures in those same files remain measurable. Nested code defined inside a test body is excluded along with that body. Custom collectors and decorated callables without an inspectable underlying Python function may retain test scaffolding in their observations.
+- File identity and arc sets both participate in equality. Ordering of files and arcs does not affect equality.
+- Empty observations are omitted from comparisons.
+- Coverage measures executed Python line transitions, not values, assertions, execution counts or complete execution paths. Native code is not measured by these Python arcs.
+- Shared fixtures, caches and other state can make observations depend on test order. A module/session fixture runs only when pytest schedules it; its coverage is attributed to the test during which it executes, not copied to every consumer.
+- Coverage configuration affects which files are measured. Fixtures and other measured support code can affect overlap results.
+- The supported execution model is a serial pytest run in one process. Distributed workers and subprocess coverage are not aggregated by this tool. Integration with other active coverage collectors is not validated.
+- The reports are independent review candidates, not a coordinated plan for removing tests.
+
+## Development checks
+
+```sh
+python -m pytest -q
 ```
-1. Duplicate tests detected with identical coverage:
-tests/test_simple.py:16:1: W001 tests with same coverage: TestSimple.test_even0 consider keeping only one (duplicate-test)
-tests/test_simple.py:19:1: W001 tests with same coverage: TestSimple.test_even2 consider keeping only one (duplicate-test)
 
-
-
-2. "God test" detected with broad coverage:
-tests/test_simple.py:25:1: W002 test TestSimple.test_evenodd can be replaced by smaller tests below (bigger-coverage)
-tests/test_simple.py:16:1: I002 test TestSimple.test_even0 covers part of TestSimple.test_evenodd test (smaller-test)
-tests/test_simple.py:22:1: I002 test TestSimple.test_odd covers part of TestSimple.test_evenodd test (smaller-test)
-
-
-
-3. Superseeded tests:
-tests/test_simple.py:25:1: I003 test TestSimple.test_evenodd covers more code than test(s) below (bigger-coverage)
-tests/test_simple.py:16:1: W003 test TestSimple.test_even0 covers less code than TestSimple.test_evenodd test. Consider remove it (smaller-coverage)
-tests/test_simple.py:19:1: W003 test TestSimple.test_even2 covers less code than TestSimple.test_evenodd test. Consider remove it (smaller-coverage)
-tests/test_simple.py:22:1: W003 test TestSimple.test_odd covers less code than TestSimple.test_evenodd test. Consider remove it (smaller-coverage)
-```
+The regression suite exercises the analyzer through isolated pytest subprocesses, including file identity, helpers in test modules, fixtures, parameterized cases, failed/skipped tests, empty observations, overlap analysis and exit codes.
