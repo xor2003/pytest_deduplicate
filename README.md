@@ -75,7 +75,7 @@ Checks are skipped if the initial pytest run fails. Finding instability or diffe
 
 ## Collection and performance
 
-The default `--collector contexts` keeps one coverage collector running and assigns explicit test node IDs as contexts. Setup, call and teardown belong to that test's context; inter-test activity uses an unqueried empty context. The previous `--collector restart` mode remains available for comparison.
+The default `--collector contexts` keeps one coverage collector running and assigns explicit test node IDs as contexts. Both collector modes select coverage.py's tracing core: Python 3.14's default `sysmon` core does not support explicit context switching or the same complete arc observations. Setup, call and teardown belong to that test's context; inter-test activity uses an unqueried empty context. The previous `--collector restart` mode remains available for comparison.
 
 ```sh
 pytest_deduplicate --source src --benchmark-collectors 3 --json benchmark.json

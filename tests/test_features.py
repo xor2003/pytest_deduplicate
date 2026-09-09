@@ -92,7 +92,7 @@ def test_mutants_distinguish_equal_coverage_and_preserve_source(tmp_path):
     assert mutations["status"] == "completed_sample"
     assert mutations["mutants"][0]["outcomes"] == {
         "test_example.py::test_zero": "killed", "test_example.py::test_two": "survived",
-    }
+    }, mutations
     assert mutations["comparisons"][0]["status"] == "different_fault_detection"
     assert (tmp_path / "product.py").read_text() == PAIR["product.py"]
 
@@ -178,3 +178,15 @@ def test_unknown_optional_child_failure_is_reported(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     status = next(iter(load_report(tmp_path)["stability"]["tests"].values()))["status"]
     assert status == "inconclusive"
+
+
+def test_configured_sysmon_cannot_disable_context_measurement(tmp_path):
+    import coverage
+    if coverage.version_info[:2] < (7, 9):
+        pytest.skip("run:core configuration was added in coverage 7.9")
+    files = dict(PAIR, **{".coveragerc": "[run]\ncore = sysmon\n"})
+    result = run_suite(tmp_path, files, "--source", "product.py", "--json", "report.json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = load_report(tmp_path)
+    assert report["findings"][0]["kind"] == "identical"
+    assert all(test["file_arcs"] == {"product.py": [[-1, 2], [2, -1]]} for test in report["tests"])

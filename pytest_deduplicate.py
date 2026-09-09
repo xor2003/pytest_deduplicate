@@ -15,6 +15,7 @@ from typing import Optional
 
 import pytest
 from coverage import Coverage
+from coverage.exceptions import ConfigError
 
 Arc = tuple[int, int]
 Location = tuple[str, Optional[int], str]
@@ -170,6 +171,14 @@ class FindDuplicateCoverage:
         self.running = False
         self.seen_nodeids = set()
         self.coverage = Coverage(branch=True, data_file=None)
+        # sysmon (the Python 3.14 default) cannot switch test contexts and
+        # does not provide the same complete arcs as the tracing cores.
+        try:
+            self.coverage.set_option("run:core", "ctrace")
+        except ConfigError:
+            # coverage < 7.9 has no public core option and defaults to ctrace.
+            if os.environ.get("COVERAGE_CORE") == "sysmon":
+                raise pytest.UsageError("Remove COVERAGE_CORE=sysmon: full per-test arcs require a tracing core")
         configured_omit = self.coverage.get_option("run:omit") or []
         self.coverage.set_option("run:omit", [*configured_omit, *omit,
                                  os.path.abspath(__file__),
@@ -327,7 +336,7 @@ def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[T
 
 
 def serialize_arcs(file_arcs):
-    return {os.path.relpath(path): [list(arc) for arc in sorted(arcs)]
+    return {os.path.relpath(Path(path).resolve(), Path.cwd().resolve()): [list(arc) for arc in sorted(arcs)]
             for path, arcs in sorted(file_arcs.items()) if arcs}
 
 

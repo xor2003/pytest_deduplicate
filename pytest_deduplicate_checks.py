@@ -45,6 +45,7 @@ def rebase(value, original, destination):
 
 
 def run_child(root, options, pytest_args, selected=None, order=None, collector=None):
+    root = Path(root).resolve()
     with tempfile.TemporaryDirectory(prefix="pytest-deduplicate-run-") as temp:
         output = Path(temp) / "report.json"
         request = Path(temp) / "request.json"
@@ -231,7 +232,8 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
         result["status"] = "no_candidates" if not candidates else "no_supported_mutants"
         return result
     with tempfile.TemporaryDirectory(prefix="pytest-deduplicate-mutations-") as temp:
-        snapshot = Path(temp) / "snapshot"
+        temp = Path(temp).resolve()
+        snapshot = temp / "snapshot"
         ignored = shutil.ignore_patterns(".git", ".venv", "venv", "__pycache__", "*.pyc", ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist", ".tox", ".nox", "node_modules", ".idea")
         shutil.copytree(root, snapshot, symlinks=True, ignore=ignored)
         valid = []
@@ -247,6 +249,11 @@ def check_mutations(report, options, pytest_args, candidates, unchecked):
                            and len(tests) == 1 and tests[0]["eligible"]
                            and tests[0]["file_arcs"] == observations[nodeid]["file_arcs"])
                 result["baseline"][nodeid] = "passed" if healthy else "inconclusive"
+                if not healthy:
+                    result.setdefault("baseline_diagnostics", {})[nodeid] = {
+                        **compact_run(run), "observed": [fingerprint(test) for test in tests],
+                        "expected": fingerprint(observations[nodeid]),
+                    }
                 if healthy:
                     valid.append(nodeid)
             finally:
