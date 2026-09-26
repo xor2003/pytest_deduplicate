@@ -69,7 +69,8 @@ class OutcomeManifest:
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, items):
         def add(code):
-            self.excluded.setdefault(str(Path(code.co_filename).resolve()), set()).update(n for _, n in dis.findlinestarts(code))
+            self.excluded.setdefault(str(Path(code.co_filename).resolve()), set()).update(
+                n for _, n in dis.findlinestarts(code) if n is not None)
             for const in code.co_consts:
                 if isinstance(const, CodeType):
                     add(const)

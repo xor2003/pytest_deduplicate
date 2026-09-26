@@ -13,10 +13,17 @@ from tests.test_features import PAIR, load_report
 
 
 @pytest.mark.parametrize('workers', [0, 2])
-def test_import_real_pytest_cov_and_reject_stale_data(tmp_path, workers):
+@pytest.mark.parametrize('context_manager', [False, True])
+def test_import_real_pytest_cov_and_reject_stale_data(tmp_path, workers, context_manager):
     pytest.importorskip('pytest_cov')
     pytest.importorskip('xdist')
     for name, source in PAIR.items():
+        if context_manager and name == 'test_example.py':
+            source = (
+                'from contextlib import nullcontext\nfrom product import nonnegative\n'
+                'def test_zero():\n    with nullcontext():\n        assert nonnegative(0)\n'
+                'def test_two():\n    with nullcontext():\n        assert nonnegative(2)\n'
+            )
         (tmp_path / name).write_text(source)
     env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
                PYTHONPATH=str(Path(__file__).resolve().parents[1]))
