@@ -1,0 +1,92 @@
+{
+  "modules": 80,
+  "tests": 240,
+  "python": "3.14.3 (main, Feb 12 2026, 00:29:58) [Clang 21.1.4 ]",
+  "samples_seconds": {
+    "baseline": [
+      3.9389597908593714,
+      3.7076301251072437,
+      3.8412091250065714
+    ],
+    "cached": [
+      2.795916834147647,
+      2.1676483331248164,
+      2.0210871659219265
+    ]
+  },
+  "observations": [
+    {
+      "mode": "baseline",
+      "run": 0,
+      "cache": {
+        "requests": 0,
+        "hits": 0,
+        "misses": 0
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    },
+    {
+      "mode": "cached",
+      "run": 0,
+      "cache": {
+        "requests": 57600,
+        "hits": 57520,
+        "misses": 80
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    },
+    {
+      "mode": "cached",
+      "run": 1,
+      "cache": {
+        "requests": 57600,
+        "hits": 57520,
+        "misses": 80
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    },
+    {
+      "mode": "baseline",
+      "run": 1,
+      "cache": {
+        "requests": 0,
+        "hits": 0,
+        "misses": 0
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    },
+    {
+      "mode": "baseline",
+      "run": 2,
+      "cache": {
+        "requests": 0,
+        "hits": 0,
+        "misses": 0
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    },
+    {
+      "mode": "cached",
+      "run": 2,
+      "cache": {
+        "requests": 57600,
+        "hits": 57520,
+        "misses": 80
+      },
+      "report_sha256": "8f3b955bcc31be8e15868f77520ba5f614183e5649d7a26888a95e0ab02aea65"
+    }
+  ],
+  "median_seconds": {
+    "baseline": 3.8412091250065714,
+    "cached": 2.1676483331248164
+  },
+  "speedup": 1.7720628693812157,
+  "exact_coverage_outcome_findings_parity": true,
+  "environment": {
+    "platform": "macOS arm64",
+    "pytest": "9.1.1",
+    "coverage": "7.16.1",
+    "pytest-cov": "7.1.0",
+    "pytest-xdist": "3.8.0"
+  }
+}

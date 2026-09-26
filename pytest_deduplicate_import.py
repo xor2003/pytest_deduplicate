@@ -176,6 +176,13 @@ def import_coverage(plugin, coverage_file, manifest_file):
         raise ValueError('manifest does not fingerprint every measured file')
     # Use coverage.py's own matcher so ** and directory globs retain live semantics.
     omit = GlobMatcher(prep_patterns(plugin.coverage.get_option('run:omit')))
+    scoped_files = []
+    for filename in sorted(measured):
+        path = plugin.source_path(filename)
+        if path is None or omit.match(str(path)):
+            continue
+        excluded = set(manifest['excluded_test_lines'].get(str(path), []))
+        scoped_files.append((filename, str(path), excluded))
     for test in observations:
         phases = test['phases']
         if set(phases) != {'setup', 'call', 'teardown'}:
@@ -192,17 +199,11 @@ def import_coverage(plugin, coverage_file, manifest_file):
                 continue
             data.set_query_context(context)
             arcs_by_file = {}
-            for filename in sorted(measured):
-                path = Path(filename).resolve()
-                if plugin.source and not any(path == s or s in path.parents for s in plugin.source):
-                    continue
-                if omit.match(str(path)):
-                    continue
-                excluded = set(manifest['excluded_test_lines'].get(str(path), []))
+            for filename, path, excluded in scoped_files:
                 arcs = {arc for arc in data.arcs(filename) or [] if not any(abs(n) in excluded for n in arc)}
                 if arcs:
-                    arcs_by_file[str(path)] = arcs
-                    test['file_arcs'].setdefault(str(path), set()).update(arcs)
+                    arcs_by_file[path] = arcs
+                    test['file_arcs'].setdefault(path, set()).update(arcs)
             test['phase_file_arcs'][phase] = arcs_by_file
         if plugin.coverage_phase == 'call':
             test['file_arcs'] = test['phase_file_arcs']['call'] or {}
