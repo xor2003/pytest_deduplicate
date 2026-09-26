@@ -167,6 +167,7 @@ class FindDuplicateCoverage:
         self.location = None
         self.nodeid = None
         self.source = [Path(path).resolve() for path in source]
+        self._source_path_cache = {}
         self.collector = collector
         self.selected = selected
         self.order = order
@@ -336,8 +337,7 @@ class FindDuplicateCoverage:
         file_arcs = {}
         try:
             for filename in sorted(data.measured_files()):
-                path = Path(filename).resolve()
-                if self.source and not any(path == root or root in path.parents for root in self.source):
+                if self.source_path(filename) is None:
                     continue
                 excluded = self.test_lines.get(os.path.abspath(filename), set())
                 arcs = {arc for arc in data.arcs(filename) or []
@@ -353,6 +353,16 @@ class FindDuplicateCoverage:
             else:
                 self.groups[signature] = TestCoverage([self.location], file_arcs)
         return file_arcs
+
+    def source_path(self, filename):
+        """Resolve measured filenames once within this fixed-scope collection."""
+        if filename not in self._source_path_cache:
+            path = Path(filename).resolve()
+            self._source_path_cache[filename] = (
+                path if not self.source or any(path == root or root in path.parents for root in self.source)
+                else None
+            )
+        return self._source_path_cache[filename]
 
 
 def find_fully_overlapped_sets(list_of_sets: list[TestCoverage]) -> list[tuple[TestCoverage, list[TestCoverage]]]:
@@ -386,18 +396,26 @@ def report_path(path):
         return str(path)
 
 
-def serialize_arcs(file_arcs):
-    return {report_path(path): [list(arc) for arc in sorted(arcs)]
-            for path, arcs in sorted(file_arcs.items()) if arcs}
+def serialize_arcs(file_arcs, path_cache=None):
+    if path_cache is None:
+        path_cache = {}
+    serialized = {}
+    for path, arcs in sorted(file_arcs.items()):
+        if arcs:
+            if path not in path_cache:
+                path_cache[path] = report_path(path)
+            serialized[path_cache[path]] = [list(arc) for arc in sorted(arcs)]
+    return serialized
 
 
 def build_report(plugin, exit_code, elapsed):
+    path_cache = {}
     tests = []
     groups = {}
     for observation in plugin.observations:
-        test = dict(observation, file_arcs=serialize_arcs(observation["file_arcs"]))
+        test = dict(observation, file_arcs=serialize_arcs(observation["file_arcs"], path_cache))
         if 'phase_file_arcs' in observation:
-            test['phase_file_arcs'] = {phase: serialize_arcs(arcs) if arcs is not None else None
+            test['phase_file_arcs'] = {phase: serialize_arcs(arcs, path_cache) if arcs is not None else None
                                        for phase, arcs in observation['phase_file_arcs'].items()}
         test["arc_count"] = sum(map(len, test["file_arcs"].values()))
         tests.append(test)
@@ -410,9 +428,9 @@ def build_report(plugin, exit_code, elapsed):
     def finding(kind, left, right, left_tests, right_tests):
         shared = left & right
         findings.append({"kind": kind, "tests": left_tests, "other_tests": right_tests,
-                         "shared": serialize_arcs(shared.file_arcs),
-                         "unique": serialize_arcs((left - right).file_arcs),
-                         "other_unique": serialize_arcs((right - left).file_arcs),
+                         "shared": serialize_arcs(shared.file_arcs, path_cache),
+                         "unique": serialize_arcs((left - right).file_arcs, path_cache),
+                         "other_unique": serialize_arcs((right - left).file_arcs, path_cache),
                          "shared_arc_count": len(shared), "unique_arc_count": len(left - right),
                          "other_unique_arc_count": len(right - left)})
 
