@@ -184,6 +184,18 @@ def import_coverage(plugin, coverage_file, manifest_file):
             continue
         excluded = set(manifest['excluded_test_lines'].get(str(path), []))
         scoped_files.append((filename, str(path), excluded))
+    files_by_context = {}
+    for file_info in scoped_files:
+        filename, _, _ = file_info
+        # Line contexts omit arcs with no positive endpoint (for example, an
+        # empty code object). Keep those files eligible in every context.
+        if any(start <= 0 and end <= 0 for start, end in data.arcs(filename) or []):
+            file_contexts = contexts
+        else:
+            file_contexts = {context for values in data.contexts_by_lineno(filename).values()
+                             for context in values}
+        for context in file_contexts:
+            files_by_context.setdefault(context, []).append(file_info)
     for test in observations:
         phases = test['phases']
         if set(phases) != {'setup', 'call', 'teardown'}:
@@ -200,7 +212,7 @@ def import_coverage(plugin, coverage_file, manifest_file):
                 continue
             data.set_query_context(context)
             arcs_by_file = {}
-            for filename, path, excluded in scoped_files:
+            for filename, path, excluded in files_by_context.get(context, ()):
                 arcs = {arc for arc in data.arcs(filename) or [] if not any(abs(n) in excluded for n in arc)}
                 if arcs:
                     arcs_by_file[path] = arcs
